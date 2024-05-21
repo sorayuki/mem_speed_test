@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.0.0)
+project(memcpytest)
+
+add_executable(memcpytest)
+target_sources(memcpytest PRIVATE
+    main.cpp
+)
+target_include_directories(memcpytest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/libsimdpp-2.1
+)
