@@ -1,11 +1,16 @@
 #define SIMDPP_ARCH_X86_AVX2
 #include "simdpp/simd.h"
 
+#include <malloc.h>
 #include <cstdio>
+#include <vector>
 #include <algorithm>
 #include <cstdlib>
-#include <malloc.h>
 #include <chrono>
+#include <atomic>
+#include <thread>
+
+#include <FastMemcpy_Avx.h>
 
 struct STD {
     static void cpy(void* dst, const void* src, intptr_t size) {
@@ -27,6 +32,13 @@ struct SIMD {
             simdpp::prefetch_read((const char*)src + i + 512);
             simdpp::stream((char*)dst + i, tmp);
         }
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+    }
+};
+
+struct FastMemcpy {
+    static void cpy(void* dst, const void* src, intptr_t size) {
+        memcpy_fast(dst, src, size);
     }
 };
 
@@ -56,8 +68,19 @@ void DoTest(const char* name) {
 }
 
 int main(int, char**){
-    DoTest<STD>("std::memcpy");
-    DoTest<STD>("std::copy_n");
-    DoTest<SIMD>("simdpp");
+    const int parallel = 4;
+    std::vector<std::thread> t;
+
+    for(int i = 0; i < parallel; ++i)
+        t.emplace_back([]() {
+            DoTest<STD>("std::memcpy");
+            DoTest<STD>("std::copy_n");
+            DoTest<SIMD>("simdpp");
+            DoTest<FastMemcpy>("FastMemcpy");
+        });
+
+    for(int i = 0; i < parallel; ++i)
+        t[i].join();
+
     return 0;
 }
