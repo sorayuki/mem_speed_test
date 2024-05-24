@@ -12,3 +12,8 @@ add_executable(test)
 target_sources(test PRIVATE main.cpp)
 target_include_directories(test PRIVATE ${INC_CL})
 target_link_libraries(test PRIVATE ${LIB_CL})
+
+add_executable(colorconv)
+target_sources(colorconv PRIVATE colorconv.cpp)
+target_include_directories(colorconv PRIVATE ${INC_CL})
+target_link_libraries(colorconv PRIVATE ${LIB_CL})
