@@ -200,36 +200,15 @@ public:
             }
         }
 
-        std::tuple<cl::Platform, cl::Device> selected;
-
-        // 最优先：Intel核显
-        for (auto& pd : platdevlist) {
-            if (std::get<0>(pd).getInfo<CL_PLATFORM_VENDOR>().find("Intel") == std::string::npos)
-                continue;
-            selected = pd;
+        for(int i = 0; i < platdevlist.size(); ++i) {
+            printf("%d: platform: %s, device: %s\n", i, std::get<0>(platdevlist[i]).getInfo<CL_PLATFORM_NAME>().c_str(), std::get<1>(platdevlist[i]).getInfo<CL_DEVICE_NAME>().c_str());
         }
+        int selected_index;
+        printf("select one: ");
+        fflush(stdout);
+        scanf("%d", &selected_index);
 
-        // 次优先：Microsoft套的Nvidia
-        // if (std::get<0>(selected)() == 0) {
-        //     for (auto& pd : platdevlist) {
-        //         if (std::get<0>(pd).getInfo<CL_PLATFORM_VENDOR>().find("Microsoft") == std::string::npos
-        //             || std::get<1>(pd).getInfo<CL_DEVICE_NAME>().find("NVIDIA") == std::string::npos
-        //         )
-        //             continue;
-        //         selected = pd;
-        //     }
-        // }
-
-        // 再次：列表里第一个
-        if (std::get<0>(selected)() == 0) {
-            if (!platdevlist.empty())
-                selected = platdevlist.front();
-        }
-
-        if (std::get<0>(selected)() == 0)
-            return;
-
-        printf("platform: %s\ndevice: %s\n", std::get<0>(selected).getInfo<CL_PLATFORM_NAME>().c_str(), std::get<1>(selected).getInfo<CL_DEVICE_NAME>().c_str());
+        std::tuple<cl::Platform, cl::Device> selected = platdevlist[selected_index];
 
         ctx_ = cl::Context(cl::vector<cl::Device>{ std::get<1>(selected) });
         queue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
