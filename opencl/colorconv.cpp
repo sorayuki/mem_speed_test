@@ -6,6 +6,7 @@
 #include <string>
 #include <tuple>
 #include <optional>
+#include <numeric>
 #include <windows.h>
 
 namespace {
@@ -13,177 +14,79 @@ namespace {
     cl::Context ctx_;
     cl::CommandQueue queue_;
     cl::Program program_;
-    size_t gmemAlign_;
+    size_t gmemAlign_ = 4;
+    bool isClShareMemory_ = false;
 
-    std::atomic_int32_t alloc_buffers_;
+    class CCClBuffer {
+        size_t size_;
+        cl::Buffer buffer_;
+        void* hostPtr_;
 
-    // buffer池
-    struct BufferItem {
-        size_t capacity = 0;
-        size_t size = 0;
-        cl::Buffer buffer;
-        cl::Buffer hostBuffer;
-        void* hostPtr;
-        BufferItem* prev = nullptr;
-        BufferItem* next = nullptr;
+        bool isUseHost_ = false;
+        bool isWrite_ = false;
 
-        std::chrono::steady_clock::time_point recycleTime = {};
+        void Init(void* ptr, size_t size, bool isWrite) {
+            size_ = size;
+            isWrite_ = isWrite;
+            hostPtr_ = ptr;
 
-        BufferItem(size_t capacity) {
-            ++alloc_buffers_;
-            buffer = cl::Buffer(ctx_, CL_MEM_READ_WRITE, capacity);
-            //hostBuffer = cl::Buffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, capacity);
-            //hostPtr = queue_.enqueueMapBuffer(hostBuffer, true, CL_MAP_WRITE, 0, capacity);
-            this->capacity = capacity;
-        }
-
-        ~BufferItem() {
-            //queue_.enqueueUnmapMemObject(hostBuffer, hostPtr);
-            --alloc_buffers_;
-        }
-
-        bool From(const void* src) {
-            // auto dst = queue_.enqueueMapBuffer(buffer, true, CL_MAP_WRITE_INVALIDATE_REGION, 0, capacity);
-            // if (dst) {
-            //     std::memcpy(dst, src, size);
-            //     queue_.enqueueUnmapMemObject(buffer, dst);
-            // }
-            // return dst != nullptr;
-
-            // hostPtr = queue_.enqueueMapBuffer(hostBuffer, true, CL_MAP_WRITE_INVALIDATE_REGION, 0, size);
-            // queue_.enqueueUnmapMemObject(hostBuffer, hostPtr);
-            // queue_.enqueueCopyBuffer(hostBuffer, buffer, 0, 0, size);
-
-            // memcpy(hostPtr, src, size);
-            queue_.enqueueWriteBuffer(buffer, false, 0, size, src);
-
-            return true;
-        }
-
-        bool To(void* dst) {
-            // auto src = queue_.enqueueMapBuffer(buffer, true, CL_MAP_READ, 0, capacity);
-            // if (src) {
-            //     std::memcpy(dst, src, size);
-            //     queue_.enqueueUnmapMemObject(buffer, src);
-            // }
-            // return src != nullptr;
-
-            // queue_.enqueueCopyBuffer(buffer, hostBuffer, 0, 0, size);
-            // hostPtr = queue_.enqueueMapBuffer(hostBuffer, true, CL_MAP_READ, 0, size);
-            // queue_.enqueueUnmapMemObject(hostBuffer, hostPtr);
-
-            queue_.enqueueReadBuffer(buffer, true, 0, size, dst);
-            // memcpy(dst, hostPtr, size);
-
-            return true;
-        }
-
-        cl::Buffer& operator*() {
-            return buffer;
-        }
-    };
-
-    std::atomic_flag poolLock = ATOMIC_FLAG_INIT;
-    BufferItem* poolHead = nullptr;
-
-    const int maxRecycledBufferSize = 80 * 1024 * 1024; // 80 MB 池的大小
-    std::chrono::steady_clock::duration maxRecycledBufferLife = std::chrono::milliseconds(500); // 500 毫秒过期时间
-
-    void CleanBuffer() {
-        auto now = std::chrono::steady_clock::now();
-        while (poolLock.test_and_set());
-        size_t totalSize = 0;
-        BufferItem* cur = poolHead;
-        // 找到限制点
-        while (cur && totalSize < maxRecycledBufferSize && now - cur->recycleTime < maxRecycledBufferLife) {
-            totalSize += cur->capacity;
-            cur = cur->next;
-        }
-
-        // 断开
-        if (cur) {
-            if (cur->prev)
-                cur->prev->next = nullptr;
-            else
-                poolHead = nullptr;
-        }
-        poolLock.clear();
-
-        // 释放
-        std::unique_ptr<BufferItem> x(cur);
-        while (x)
-            x.reset(x->next);
-    }
-
-    void ReleaseBuffer(BufferItem* item) {
-        item->recycleTime = std::chrono::steady_clock::now();
-
-        while (poolLock.test_and_set());
-        item->prev = nullptr;
-        item->next = poolHead;
-        if (poolHead)
-            poolHead->prev = item;
-        poolHead = item;
-        poolLock.clear();
-
-        CleanBuffer();
-    }
-
-    struct BufferItemDeleter {
-        void operator()(BufferItem* item) const {
-            if (item) {
-                ReleaseBuffer(item);
-            }
-        }
-    };
-
-    using BufferItemPtr = std::unique_ptr<BufferItem, BufferItemDeleter>;
-
-    BufferItemPtr getBuffer(size_t size) {
-        CleanBuffer();
-
-        while (poolLock.test_and_set());
-        BufferItem* item = poolHead;
-        while (item) {
-            if (item->capacity >= size && item->capacity <= size * 2) {
-                item->size = size;
-                break;
-            }
-            item = item->next;
-        }
-
-        // 摘除节点
-        if (item) {
-            if (item->prev) {
-                item->prev->next = item->next;
+            auto addr = (intptr_t)ptr;
+            cl_mem_flags rwFlag = isWrite_ ? CL_MEM_WRITE_ONLY : CL_MEM_READ_ONLY;
+            if (isClShareMemory_ && addr % gmemAlign_ == 0) {
+                buffer_ = cl::Buffer{ ctx_, CL_MEM_USE_HOST_PTR | rwFlag, size_, ptr };
+                isUseHost_ = true;
             }
             else {
-                poolHead = item->next;
+                buffer_ = cl::Buffer{ ctx_, rwFlag , size_ };
+                if (!isWrite_) {
+                    queue_.enqueueWriteBuffer(buffer_, false, 0, size_, ptr);
+                }
             }
-
-            if (item->next)
-                item->next->prev = item->prev;
         }
-        poolLock.clear();
-
-        // 新建节点
-        if (!item) {
-            auto capacity = size;
-            if (capacity % gmemAlign_ != 0) {
-                capacity += gmemAlign_ - (capacity % gmemAlign_);
-            }
-            item = new BufferItem{ capacity };
-            item->size = size;
+    public:
+        CCClBuffer(void* ptr, size_t size, bool isWrite) {
+            Init(ptr, size, isWrite);
         }
 
-        return BufferItemPtr(item);
-    }
+        CCClBuffer(const void* ptr, size_t size) {
+            Init((void*)ptr, size, false);
+        }
+
+        ~CCClBuffer() {
+            if (isUseHost_ && isWrite_) {
+                // 同步数据刷一下
+                void* hostptr = queue_.enqueueMapBuffer(buffer_, true, CL_MAP_READ, 0, size_);
+                queue_.enqueueUnmapMemObject(buffer_, hostptr);
+            }
+            else {
+                queue_.enqueueReadBuffer(buffer_, true, 0, size_, hostPtr_);
+            }
+        }
+
+        operator cl::Buffer& () {
+            return buffer_;
+        }
+    };
 };
+
+size_t cl_mem_align() {
+    // return gmemAlign_;
+    static std::optional<size_t> align;
+    if (!align) {
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        align = std::lcm(gmemAlign_, si.dwPageSize);
+    }
+    
+    return *align;
+}
+
 
 class CLEnv {
 public:
     CLEnv() {
         std::vector<std::tuple<cl::Platform, cl::Device>> platdevlist;
+        std::vector<bool> isShareMemory;
         std::vector<cl::Platform> platforms;
         cl::Platform::get(&platforms);
         for (auto& p : platforms) {
@@ -196,19 +99,21 @@ public:
 
                 for (auto& d : devices) {
                     platdevlist.emplace_back(std::make_tuple(p, d));
+                    isShareMemory.emplace_back(p.getInfo<CL_PLATFORM_NAME>().find("Intel") != std::string::npos);
                 }
             }
         }
 
         for(int i = 0; i < platdevlist.size(); ++i) {
-            printf("%d: platform: %s, device: %s\n", i, std::get<0>(platdevlist[i]).getInfo<CL_PLATFORM_NAME>().c_str(), std::get<1>(platdevlist[i]).getInfo<CL_DEVICE_NAME>().c_str());
+            fprintf(stderr, "%d: platform: %s, device: %s\n", i, std::get<0>(platdevlist[i]).getInfo<CL_PLATFORM_NAME>().c_str(), std::get<1>(platdevlist[i]).getInfo<CL_DEVICE_NAME>().c_str());
         }
         int selected_index;
-        printf("select one: ");
+        fprintf(stderr, "select one: \n");
         fflush(stdout);
         scanf("%d", &selected_index);
 
-        std::tuple<cl::Platform, cl::Device> selected = platdevlist[selected_index];
+        auto selected = platdevlist[selected_index];
+        isClShareMemory_ = isShareMemory[selected_index];
 
         ctx_ = cl::Context(cl::vector<cl::Device>{ std::get<1>(selected) });
         queue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
@@ -308,7 +213,7 @@ public:
             cl_int buildErr = CL_SUCCESS;
             auto buildInfo = program_.getBuildInfo<CL_PROGRAM_BUILD_LOG>(&buildErr);
             for (auto& pair : buildInfo) {
-                MessageBoxA(NULL, pair.second.c_str(), "error", MB_ICONERROR);
+                fprintf(stderr, "%s\n", pair.second.c_str());
             }
 
             return;
@@ -318,16 +223,6 @@ public:
     }
 
     ~CLEnv() {
-        std::unique_ptr<BufferItem> x{};
-
-        while (poolLock.test_and_set());
-        x.reset(poolHead);
-        poolHead = nullptr;
-        poolLock.clear();
-
-        while (x) {
-            x.reset(x->next);
-        }
     }
 };
 
@@ -364,18 +259,18 @@ std::optional<std::tuple<cl_float4, cl_float4, cl_float4, cl_uchar2, cl_uchar2>>
 
 
 bool opencl_bgra_to_i420_frame(
-    int width, int height,
-    const void* src, int stride,
-    void* dstY, int strideY,
-    void* dstU, int strideU,
-    void* dstV, int strideV
+    size_t width, size_t height,
+    const void* src, size_t stride,
+    void* dstY, size_t strideY,
+    void* dstU, size_t strideU,
+    void* dstV, size_t strideV
 ) {
     if (!available_)
         return false;
 
     auto func = cl::KernelFunctor<
-        cl::Buffer, int, 
-        cl::Buffer, int, cl::Buffer, int, cl::Buffer, int,
+        cl::Buffer, cl_uint,
+        cl::Buffer, cl_uint, cl::Buffer, cl_uint, cl::Buffer, cl_uint,
         cl_float4, cl_float4, cl_float4,
         cl_uchar2, cl_uchar2>
         (program_, "bgra_to_i420_frame");
@@ -386,44 +281,26 @@ bool opencl_bgra_to_i420_frame(
 
     auto [yfactor, ufactor, vfactor, yrange, uvrange] = *factors;
 
-    auto srcbuf = getBuffer(stride * height);
-    auto ybuf = getBuffer(height * strideY);
-    auto ubuf = getBuffer(height / 2 * strideU);
-    auto vbuf = getBuffer(height / 2 * strideV);
+    CCClBuffer srcbuf{ src, stride * height },
+        ybuf{ dstY, height * strideY, true },
+        ubuf{ dstU, height / 2 * strideU, true },
+        vbuf{ dstV, height / 2 * strideV, true };
 
-    srcbuf->From(src);
-
-    // cl::Buffer srcbuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, (size_t)stride * height, (void*)src);
-    // cl::Buffer ybuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, (size_t)strideY * height, (void*)dstY);
-    // cl::Buffer ubuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, (size_t)strideU * height / 2, (void*)dstU);
-    // cl::Buffer vbuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, (size_t)strideV * height / 2, (void*)dstV);
-
-    func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2), cl::NDRange(256)), 
-        **srcbuf, stride, **ybuf, strideY, **ubuf, strideU, **vbuf, strideV,
+    func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2)),
+        srcbuf, (cl_uint)stride, ybuf, (cl_uint)strideY, ubuf, (cl_uint)strideU, vbuf, (cl_uint)strideV,
         yfactor, ufactor, vfactor,
         yrange, uvrange
     );
-
-    // queue_.enqueueMapBuffer(ybuf, true, CL_MEM_READ_ONLY, 0, strideY * height);
-    // queue_.enqueueMapBuffer(ubuf, true, CL_MEM_READ_ONLY, 0, strideU * height / 2);
-    // queue_.enqueueMapBuffer(vbuf, true, CL_MEM_READ_ONLY, 0, strideV * height / 2);
-    // queue_.enqueueUnmapMemObject(ybuf, dstY);
-    // queue_.enqueueUnmapMemObject(ubuf, dstU);
-    // queue_.enqueueUnmapMemObject(vbuf, dstV);
-
-    ybuf->To(dstY);
-    ubuf->To(dstU);
-    vbuf->To(dstV);
 
     return true;
 }
 
 
 bool opencl_nv12_to_bgra_frame(
-    int width, int height,
-    void* dst, int stride,
-    const void* srcY, int strideY,
-    const void* srcUV, int strideUV
+    size_t width, size_t height,
+    void* dst, size_t stride,
+    const void* srcY, size_t strideY,
+    const void* srcUV, size_t strideUV
 ) {
     if (!available_)
         return false;
@@ -435,24 +312,19 @@ bool opencl_nv12_to_bgra_frame(
     auto [rfactor, gfactor, bfactor] = *factors;
 
     auto func = cl::KernelFunctor<
-        cl::Buffer, int, 
-        cl::Buffer, int, cl::Buffer, int,
+        cl::Buffer, cl_uint,
+        cl::Buffer, cl_uint, cl::Buffer, cl_uint,
         cl_float4, cl_float4, cl_float4>
         (program_, "nv12_to_bgra_frame");
 
-    auto dstbuf = getBuffer(stride * height);
-    auto ybuf = getBuffer(height * strideY);
-    auto uvbuf = getBuffer(height / 2 * strideUV);
-    
-    ybuf->From(srcY);
-    uvbuf->From(srcUV);
+    CCClBuffer dstbuf{ dst, stride * height, true },
+        ybuf{ srcY, height * strideY },
+        uvbuf{ srcUV, height / 2 * strideUV };
 
     func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2)),
-        **dstbuf, stride, **ybuf, strideY, **uvbuf, strideUV,
+        dstbuf, (cl_uint)stride, ybuf, (cl_uint)strideY, uvbuf, (cl_uint)strideUV,
         rfactor, gfactor, bfactor
     );
-    
-    dstbuf->To(dst);
 
     return true;
 }
@@ -462,7 +334,7 @@ bool opencl_i420_to_bgra_frame(
     const void* y, size_t strideY,
     const void* u, size_t strideU,
     const void* v, size_t strideV,
-    unsigned int width, unsigned int height,
+    size_t width, size_t height,
     size_t dst_stride, void* dst
 ) {
     if (!available_)
@@ -475,40 +347,35 @@ bool opencl_i420_to_bgra_frame(
     auto [rfactor, gfactor, bfactor] = *factors;
 
     auto func = cl::KernelFunctor<
-        cl::Buffer, int,
-        cl::Buffer, int, cl::Buffer, int, cl::Buffer, int,
+        cl::Buffer, cl_uint,
+        cl::Buffer, cl_uint, cl::Buffer, cl_uint, cl::Buffer, cl_uint,
         cl_float4, cl_float4, cl_float4>
         (program_, "i420_to_bgra_frame");
 
-    auto dstbuf = getBuffer(dst_stride * height);
-    auto ybuf = getBuffer(height * strideY);
-    auto ubuf = getBuffer(height / 2 * strideU);
-    auto vbuf = getBuffer(height / 2 * strideV);
-
-    ybuf->From(y);
-    ubuf->From(u);
-    vbuf->From(v);
+    CCClBuffer dstbuf{ dst, dst_stride * height, true },
+        ybuf{ y, strideY * height },
+        ubuf{ u, strideU * height / 2 },
+        vbuf{ v, strideV * height / 2 };
 
     func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2)),
-        **dstbuf, dst_stride,
-        **ybuf, strideY, **ubuf, strideU, **vbuf, strideV,
+        dstbuf, (cl_uint)dst_stride,
+        ybuf, (cl_uint)strideY, ubuf, (cl_uint)strideU, vbuf, (cl_uint)strideV,
         rfactor, gfactor, bfactor
     );
 
-    dstbuf->To(dst);
-
     return true;
 }
+
 
 int main() {
     // std::vector<char> src(2560 * 1440 * 4);
     // std::vector<char> y(2560 * 1440);
     // std::vector<char> u(2560 * 1440 / 4);
     // std::vector<char> v(2560 * 1440 / 4);
-    auto src = _aligned_malloc(2560 * 1440 * 4, 1);
-    auto y = (char*)_aligned_malloc(2560 * 1440, 1);
-    auto u = (char*)_aligned_malloc(2560 * 1440 / 4, 1);
-    auto v = (char*)_aligned_malloc(2560 * 1440 / 4, 1);
+    auto src = _aligned_malloc(2560 * 1440 * 4, cl_mem_align());
+    auto y = (char*)_aligned_malloc(2560 * 1440, cl_mem_align());
+    auto u = (char*)_aligned_malloc(2560 * 1440 / 4, cl_mem_align());
+    auto v = (char*)_aligned_malloc(2560 * 1440 / 4, cl_mem_align());
     memset(src, 0, 2560 * 1440 * 4);
     memset(y, 0, 2560 * 1440);
     memset(u, 0, 2560 * 1440 / 4);
@@ -521,7 +388,7 @@ int main() {
     for(;;) {
         auto diff = std::chrono::steady_clock::now() - begin;
         if (diff > std::chrono::seconds(1)) {
-            printf("fps = %g\n", frames * 1000.0 / std::chrono::duration_cast<std::chrono::milliseconds>(diff).count());
+            fprintf(stderr, "fps = %g\n", frames * 1000.0 / std::chrono::duration_cast<std::chrono::milliseconds>(diff).count());
             fflush(stdout);
             begin = std::chrono::steady_clock::now();
             frames = 0;
@@ -535,12 +402,12 @@ int main() {
             v, 2560 / 2
         );
         frames += 1;
-        // printf("frame: %d\n", frames);
+        // fprintf(stderr, "frame: %d\n", frames);
 
         if (false && frames == 1) {
-            for(int i = 0; i < 2560 * 1440; ++i) if (y[i] != 16) { printf("check failed.\n"); break; }
-            for(int i = 0; i < 2560 * 1440 / 4; ++i) if (u[i] != -128) { printf("check failed.\n"); break; }
-            for(int i = 0; i < 2560 * 1440 / 4; ++i) if (v[i] != -128) { printf("check failed.\n"); break; }
+            for(int i = 0; i < 2560 * 1440; ++i) if (y[i] != 16) { fprintf(stderr, "check failed.\n"); break; }
+            for(int i = 0; i < 2560 * 1440 / 4; ++i) if (u[i] != -128) { fprintf(stderr, "check failed.\n"); break; }
+            for(int i = 0; i < 2560 * 1440 / 4; ++i) if (v[i] != -128) { fprintf(stderr, "check failed.\n"); break; }
         }
     }
 
