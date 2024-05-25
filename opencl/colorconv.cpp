@@ -32,13 +32,13 @@ namespace {
         BufferItem(size_t capacity) {
             ++alloc_buffers_;
             buffer = cl::Buffer(ctx_, CL_MEM_READ_WRITE, capacity);
-            hostBuffer = cl::Buffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, capacity);
-            hostPtr = queue_.enqueueMapBuffer(hostBuffer, true, CL_MAP_WRITE, 0, capacity);
+            //hostBuffer = cl::Buffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, capacity);
+            //hostPtr = queue_.enqueueMapBuffer(hostBuffer, true, CL_MAP_WRITE, 0, capacity);
             this->capacity = capacity;
         }
 
         ~BufferItem() {
-            queue_.enqueueUnmapMemObject(hostBuffer, hostPtr);
+            //queue_.enqueueUnmapMemObject(hostBuffer, hostPtr);
             --alloc_buffers_;
         }
 
@@ -386,34 +386,34 @@ bool opencl_bgra_to_i420_frame(
 
     auto [yfactor, ufactor, vfactor, yrange, uvrange] = *factors;
 
-    // auto srcbuf = getBuffer(stride * height);
-    // auto ybuf = getBuffer(height * strideY);
-    // auto ubuf = getBuffer(height / 2 * strideU);
-    // auto vbuf = getBuffer(height / 2 * strideV);
+    auto srcbuf = getBuffer(stride * height);
+    auto ybuf = getBuffer(height * strideY);
+    auto ubuf = getBuffer(height / 2 * strideU);
+    auto vbuf = getBuffer(height / 2 * strideV);
 
-    // srcbuf->From(src);
+    srcbuf->From(src);
 
-    cl::Buffer srcbuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, (size_t)stride * height, (void*)src);
-    cl::Buffer ybuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, (size_t)strideY * height, (void*)dstY);
-    cl::Buffer ubuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, (size_t)strideU * height / 2, (void*)dstU);
-    cl::Buffer vbuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, (size_t)strideV * height / 2, (void*)dstV);
+    // cl::Buffer srcbuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, (size_t)stride * height, (void*)src);
+    // cl::Buffer ybuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, (size_t)strideY * height, (void*)dstY);
+    // cl::Buffer ubuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, (size_t)strideU * height / 2, (void*)dstU);
+    // cl::Buffer vbuf(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, (size_t)strideV * height / 2, (void*)dstV);
 
-    func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2)),
-        srcbuf, stride, ybuf, strideY, ubuf, strideU, vbuf, strideV,
+    func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2), cl::NDRange(256)), 
+        **srcbuf, stride, **ybuf, strideY, **ubuf, strideU, **vbuf, strideV,
         yfactor, ufactor, vfactor,
         yrange, uvrange
     );
 
-    queue_.enqueueMapBuffer(ybuf, true, CL_MEM_READ_ONLY, 0, strideY * height);
-    queue_.enqueueMapBuffer(ubuf, true, CL_MEM_READ_ONLY, 0, strideU * height / 2);
-    queue_.enqueueMapBuffer(vbuf, true, CL_MEM_READ_ONLY, 0, strideV * height / 2);
-    queue_.enqueueUnmapMemObject(ybuf, dstY);
-    queue_.enqueueUnmapMemObject(ubuf, dstU);
-    queue_.enqueueUnmapMemObject(vbuf, dstV);
+    // queue_.enqueueMapBuffer(ybuf, true, CL_MEM_READ_ONLY, 0, strideY * height);
+    // queue_.enqueueMapBuffer(ubuf, true, CL_MEM_READ_ONLY, 0, strideU * height / 2);
+    // queue_.enqueueMapBuffer(vbuf, true, CL_MEM_READ_ONLY, 0, strideV * height / 2);
+    // queue_.enqueueUnmapMemObject(ybuf, dstY);
+    // queue_.enqueueUnmapMemObject(ubuf, dstU);
+    // queue_.enqueueUnmapMemObject(vbuf, dstV);
 
-    // ybuf->To(dstY);
-    // ubuf->To(dstU);
-    // vbuf->To(dstV);
+    ybuf->To(dstY);
+    ubuf->To(dstU);
+    vbuf->To(dstV);
 
     return true;
 }
@@ -522,6 +522,7 @@ int main() {
         auto diff = std::chrono::steady_clock::now() - begin;
         if (diff > std::chrono::seconds(1)) {
             printf("fps = %g\n", frames * 1000.0 / std::chrono::duration_cast<std::chrono::milliseconds>(diff).count());
+            fflush(stdout);
             begin = std::chrono::steady_clock::now();
             frames = 0;
         }
