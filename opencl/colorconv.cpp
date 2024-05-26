@@ -4,10 +4,12 @@
 #include <CL/opencl.hpp>
 #include <vector>
 #include <string>
+#include <list>
 #include <tuple>
 #include <optional>
 #include <numeric>
 #include <windows.h>
+
 
 namespace {
     bool available_ = false;
@@ -15,31 +17,163 @@ namespace {
     cl::CommandQueue queue_;
     cl::Program program_;
     size_t gmemAlign_ = 4;
-    bool isClShareMemory_ = false;
+    bool reuseBuffer_ = true;
+    
+    const int BM_USE_HOST = 0b00000001;
+    const int BM_DEVICE   = 0b00000010;
+    const int BM_HOST     = 0b00000100;
+    const int BM_COPY     = 0b00001000;
+    const int BM_MAP      = 0b00010000;
+    int bufferMode_ = BM_DEVICE | BM_COPY;
+
+    size_t cl_mem_align() {
+        return gmemAlign_;
+        static std::optional<size_t> align;
+        if (!align) {
+            SYSTEM_INFO si;
+            GetSystemInfo(&si);
+            align = std::lcm(gmemAlign_, si.dwPageSize);
+        }
+        
+        return *align;
+    }
+
+    struct PinnedMemory {
+        template<class T>
+        struct MemBlock {
+            cl::Buffer buffer_;
+            size_t size_;
+            T* hostPtr_;
+        public:
+            MemBlock(size_t size) {
+                size_ = size;
+                buffer_ = cl::Buffer( ctx_, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, size_);
+                hostPtr_ = (T*) queue_.enqueueMapBuffer(buffer_, true, CL_MAP_WRITE, 0, size_);
+            }
+
+            ~MemBlock() {
+                queue_.enqueueUnmapMemObject(buffer_, hostPtr_);
+            }
+
+            operator T*() const {
+                return hostPtr_;
+            }
+        };
+    };
+
+
+    struct AlignedMemory {
+        template<class T>
+        struct MemBlock {
+            size_t size_;
+            T* hostPtr_;
+        public:
+            MemBlock(size_t size) {
+                size_ = size;
+                hostPtr_ = (T*)_aligned_malloc(size, cl_mem_align());
+            }
+
+            ~MemBlock() {
+                _aligned_free(hostPtr_);
+            }
+
+            operator T*() const {
+                return hostPtr_;
+            }
+        };
+    };
+
+    struct RegularMemory {
+        template<class T>
+        struct MemBlock {
+            std::vector<T> data_;
+            T* hostPtr_;
+        public:
+            MemBlock(size_t size) {
+                data_.resize(size);
+                hostPtr_ = data_.data();
+            }
+
+            ~MemBlock() {
+            }
+
+            operator T*() {
+                return hostPtr_;
+            }
+
+            T& operator [](int index) {
+                return hostPtr_[index];
+            }
+        };
+    };
+
+    class BufferPool {
+        struct Item {
+            cl::Buffer buffer;
+            size_t flags;
+            size_t size;
+        };
+
+        std::list<Item> pool;
+    public:
+        cl::Buffer retain(size_t flags, size_t size) {
+            for(auto it = pool.begin(); it != pool.end(); ++it) {
+                if (it->flags == flags && it->size == size) {
+                    cl::Buffer retval = it->buffer;
+                    pool.erase(it);
+                    return retval;
+                }
+            }
+
+            return cl::Buffer(ctx_, flags, size);
+        }
+
+        void release(cl::Buffer& buffer, size_t flags, size_t size) {
+            if (!reuseBuffer_) return;
+            pool.push_front({ buffer, flags, size });
+            while (pool.size() > 8) {
+                pool.pop_back();
+            }
+        }
+    } pool_;
 
     class CCClBuffer {
         size_t size_;
         cl::Buffer buffer_;
+        size_t flags_;
         void* hostPtr_;
 
-        bool isUseHost_ = false;
+        int localBufferMode_;
         bool isWrite_ = false;
 
         void Init(void* ptr, size_t size, bool isWrite) {
             size_ = size;
             isWrite_ = isWrite;
             hostPtr_ = ptr;
+            localBufferMode_ = bufferMode_;
 
             auto addr = (intptr_t)ptr;
-            cl_mem_flags rwFlag = isWrite_ ? CL_MEM_WRITE_ONLY : CL_MEM_READ_ONLY;
-            if (isClShareMemory_ && addr % gmemAlign_ == 0) {
-                buffer_ = cl::Buffer{ ctx_, CL_MEM_USE_HOST_PTR | rwFlag, size_, ptr };
-                isUseHost_ = true;
+            flags_ = isWrite_ ? (CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY) : (CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY);
+            
+            if (localBufferMode_ & BM_USE_HOST) {
+                buffer_ = cl::Buffer{ ctx_, CL_MEM_USE_HOST_PTR | flags_, size_, ptr };
             }
             else {
-                buffer_ = cl::Buffer{ ctx_, rwFlag , size_ };
-                if (!isWrite_) {
-                    queue_.enqueueWriteBuffer(buffer_, false, 0, size_, ptr);
+                if (localBufferMode_ & BM_DEVICE) {
+                } else if (localBufferMode_ == BM_HOST) {
+                    flags_ |= CL_MEM_ALLOC_HOST_PTR;
+                }
+
+                buffer_ = pool_.retain(flags_, size_);
+
+                if (isWrite_ == false) {
+                    if (localBufferMode_ & BM_COPY)
+                        queue_.enqueueWriteBuffer(buffer_, false, 0, size_, ptr);
+                    else if (localBufferMode_ & BM_MAP) {
+                        auto mapped = (void*)queue_.enqueueMapBuffer(buffer_, true, CL_MAP_WRITE, 0, size_);
+                        memcpy(mapped, hostPtr_, size_);
+                        queue_.enqueueUnmapMemObject(buffer_, mapped);
+                    }
                 }
             }
         }
@@ -53,13 +187,23 @@ namespace {
         }
 
         ~CCClBuffer() {
-            if (isUseHost_ && isWrite_) {
-                // 同步数据刷一下
-                void* hostptr = queue_.enqueueMapBuffer(buffer_, true, CL_MAP_READ, 0, size_);
-                queue_.enqueueUnmapMemObject(buffer_, hostptr);
-            }
-            else {
-                queue_.enqueueReadBuffer(buffer_, true, 0, size_, hostPtr_);
+            if (isWrite_) {
+                if (localBufferMode_ & BM_USE_HOST) {
+                    // 同步数据刷一下
+                    void* hostptr = queue_.enqueueMapBuffer(buffer_, true, CL_MAP_READ, 0, size_);
+                    queue_.enqueueUnmapMemObject(buffer_, hostptr);
+                }
+                else {
+                    if (localBufferMode_ & BM_COPY)
+                        queue_.enqueueReadBuffer(buffer_, true, 0, size_, hostPtr_);
+                    else if (localBufferMode_ & BM_MAP) {
+                        auto mapped = (void*)queue_.enqueueMapBuffer(buffer_, true, CL_MAP_READ, 0, size_);
+                        memcpy(hostPtr_, mapped, size_);
+                        queue_.enqueueUnmapMemObject(buffer_, mapped);
+                    }
+
+                    pool_.release(buffer_, flags_, size_);
+                }
             }
         }
 
@@ -69,24 +213,12 @@ namespace {
     };
 };
 
-size_t cl_mem_align() {
-    // return gmemAlign_;
-    static std::optional<size_t> align;
-    if (!align) {
-        SYSTEM_INFO si;
-        GetSystemInfo(&si);
-        align = std::lcm(gmemAlign_, si.dwPageSize);
-    }
-    
-    return *align;
-}
-
 
 class CLEnv {
 public:
     CLEnv() {
         std::vector<std::tuple<cl::Platform, cl::Device>> platdevlist;
-        std::vector<bool> isShareMemory;
+        std::vector<bool> is_igpu;
         std::vector<cl::Platform> platforms;
         cl::Platform::get(&platforms);
         for (auto& p : platforms) {
@@ -99,13 +231,25 @@ public:
 
                 for (auto& d : devices) {
                     platdevlist.emplace_back(std::make_tuple(p, d));
-                    isShareMemory.emplace_back(p.getInfo<CL_PLATFORM_NAME>().find("Intel") != std::string::npos);
+                    auto iGPU = false;
+                    iGPU = iGPU || p.getInfo<CL_PLATFORM_NAME>().find("Intel") != std::string::npos;
+                    iGPU = iGPU || (p.getInfo<CL_PLATFORM_NAME>().find("AMD") != std::string::npos && d.getInfo<CL_DEVICE_NAME>().find("gfx") != std::string::npos);
+
+                    cl::size_type retval;
+                    cl::size_type retsize;
+                    clGetDeviceInfo(d(), CL_DEVICE_HOST_UNIFIED_MEMORY, sizeof(cl::size_type), &retval, &retsize);
+                    is_igpu.emplace_back(retval);
                 }
             }
         }
 
         for(int i = 0; i < platdevlist.size(); ++i) {
-            fprintf(stderr, "%d: platform: %s, device: %s\n", i, std::get<0>(platdevlist[i]).getInfo<CL_PLATFORM_NAME>().c_str(), std::get<1>(platdevlist[i]).getInfo<CL_DEVICE_NAME>().c_str());
+            fprintf(stderr, "%d: platform: %s, device: %s %s\n", 
+                i, 
+                std::get<0>(platdevlist[i]).getInfo<CL_PLATFORM_NAME>().c_str(),
+                std::get<1>(platdevlist[i]).getInfo<CL_DEVICE_NAME>().c_str(),
+                is_igpu[i] ? "[MEM]" : "[GMEM]"
+            );
         }
         int selected_index;
         fprintf(stderr, "select one: \n");
@@ -113,7 +257,6 @@ public:
         scanf("%d", &selected_index);
 
         auto selected = platdevlist[selected_index];
-        isClShareMemory_ = isShareMemory[selected_index];
 
         ctx_ = cl::Context(cl::vector<cl::Device>{ std::get<1>(selected) });
         queue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
@@ -144,59 +287,6 @@ public:
                             dstU[yd2 * strideU + xd2] = clamp(convert_uchar_sat(dot(srcvec, ufactor)), uvrange.x, uvrange.y);
                             dstV[yd2 * strideV + xd2] = clamp(convert_uchar_sat(dot(srcvec, vfactor)), uvrange.x, uvrange.y);
                         }
-                    }
-                }
-            }
-
-            kernel void nv12_to_bgra_frame(
-	            global uchar* dst, int stride,
-	            global const uchar* srcY, int strideY,
-	            global const uchar* srcUV, int strideUV,
-                const float4 rfactor, const float4 gfactor, const float4 bfactor
-            ) {
-	            const int xd2 = get_global_id(0);
-	            const int yd2 = get_global_id(1);
-                const int x = xd2 * 2;
-                const int y = yd2 * 2;
-
-                uchar2 uv = vload2(xd2, srcUV + yd2 * strideUV);
-
-                __attribute__((opencl_unroll_hint))
-                for(int j = 0; j < 2; ++j) {
-                    __attribute__((opencl_unroll_hint))
-                    for(int i = 0; i < 2; ++i) {
-                        uchar4 srcu8 = (uchar4)(srcY[(y + j) * strideY + (x + i)], uv.x, uv.y, 1);
-                        float4 srcvec = convert_float4(srcu8) - (float4)(0.0, 128.0, 128.0, 0.0);
-                        uchar4 dstu8 = convert_uchar4_sat((float4)(dot(srcvec, bfactor), dot(srcvec, gfactor), dot(srcvec, rfactor), 255.0));
-                        vstore4(dstu8, x + i, dst + (y + j) * stride);
-                    }
-                }
-            }
-
-            kernel void i420_to_bgra_frame(
-	            global uchar* dst, int stride,
-	            global const uchar* srcY, int strideY,
-	            global const uchar* srcU, int strideU,
-                global const uchar* srcV, int strideV,
-                const float4 rfactor, const float4 gfactor, const float4 bfactor
-            ) {
-	            const int xd2 = get_global_id(0);
-	            const int yd2 = get_global_id(1);
-                const int x = xd2 * 2;
-                const int y = yd2 * 2;
-
-                uchar su = srcU[yd2 * strideU + xd2];
-                uchar sv = srcV[yd2 * strideV + xd2];
-
-                __attribute__((opencl_unroll_hint))
-                for(int j = 0; j < 2; ++j) {
-                    __attribute__((opencl_unroll_hint))
-                    for(int i = 0; i < 2; ++i) {
-                        uchar sy = srcY[(y + j) * strideY + (x + i)];
-                        uchar4 srcu8 = (uchar4)(sy, su, sv, 1);
-                        float4 srcvec = convert_float4(srcu8) - (float4)(0.0, 128.0, 128.0, 0.0);
-                        uchar4 dstu8 = convert_uchar4_sat((float4)(dot(srcvec, bfactor), dot(srcvec, gfactor), dot(srcvec, rfactor), 255.0));
-                        vstore4(dstu8, x + i, dst + (y + j) * stride);
                     }
                 }
             }
@@ -366,55 +456,93 @@ bool opencl_i420_to_bgra_frame(
     return true;
 }
 
+template<class MemT>
+void test() {
+    const int width = 1920;
+    const int height = 1920;
 
-int main() {
-    // std::vector<char> src(2560 * 1440 * 4);
-    // std::vector<char> y(2560 * 1440);
-    // std::vector<char> u(2560 * 1440 / 4);
-    // std::vector<char> v(2560 * 1440 / 4);
-    auto src = _aligned_malloc(2560 * 1440 * 4, cl_mem_align());
-    auto y = (char*)_aligned_malloc(2560 * 1440, cl_mem_align());
-    auto u = (char*)_aligned_malloc(2560 * 1440 / 4, cl_mem_align());
-    auto v = (char*)_aligned_malloc(2560 * 1440 / 4, cl_mem_align());
-    memset(src, 0, 2560 * 1440 * 4);
-    memset(y, 0, 2560 * 1440);
-    memset(u, 0, 2560 * 1440 / 4);
-    memset(v, 0, 2560 * 1440 / 4);
+    auto src = typename MemT::MemBlock<char>(width * height * 4);
+    auto y = typename MemT::MemBlock<char>(width * height);
+    auto u = typename MemT::MemBlock<char>(width * height / 4);
+    auto v = typename MemT::MemBlock<char>(width * height / 4);
+    memset(src, 255, width * height * 4);
+    memset(y, 0, width * height);
+    memset(u, 0, width * height / 4);
+    memset(v, 0, width * height / 4);
 
     auto begin = std::chrono::steady_clock::now();
+    auto iter_begin = begin;
     size_t frames = 0;
+    size_t iter_frames = 0;
     double fps = 60.0;
 
     for(;;) {
         auto diff = std::chrono::steady_clock::now() - begin;
-        if (diff > std::chrono::seconds(1)) {
-            fprintf(stderr, "fps = %g\n", frames * 1000.0 / std::chrono::duration_cast<std::chrono::milliseconds>(diff).count());
-            fflush(stdout);
-            begin = std::chrono::steady_clock::now();
-            frames = 0;
+        auto iter_diff = std::chrono::steady_clock::now() - iter_begin;
+        if (iter_diff > std::chrono::seconds(1)) {
+            fprintf(stderr, "fps = %g, avg = %g\n",
+                iter_frames * 1000.0 / std::chrono::duration_cast<std::chrono::milliseconds>(iter_diff).count(),
+                frames * 1000.0 / std::chrono::duration_cast<std::chrono::milliseconds>(diff).count()
+            );
+            iter_begin = std::chrono::steady_clock::now();
+            iter_frames = 0;
         }
+
+        if (diff > std::chrono::seconds(15))
+            break;
         // auto targetTime = begin + frames * std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)) / fps;
         // std::this_thread::sleep_until(targetTime);
-        opencl_bgra_to_i420_frame(2560, 1440, 
-            src, 2560 * 4,
-            y, 2560,
-            u, 2560 / 2,
-            v, 2560 / 2
+        opencl_bgra_to_i420_frame(width, height, 
+            src, width * 4,
+            y, width,
+            u, width / 2,
+            v, width / 2
         );
+        iter_frames += 1;
         frames += 1;
-        // fprintf(stderr, "frame: %d\n", frames);
 
-        if (false && frames == 1) {
-            for(int i = 0; i < 2560 * 1440; ++i) if (y[i] != 16) { fprintf(stderr, "check failed.\n"); break; }
-            for(int i = 0; i < 2560 * 1440 / 4; ++i) if (u[i] != -128) { fprintf(stderr, "check failed.\n"); break; }
-            for(int i = 0; i < 2560 * 1440 / 4; ++i) if (v[i] != -128) { fprintf(stderr, "check failed.\n"); break; }
+        if (frames == 1) {
+            for(int i = 0; i < width * height; ++i) if (y[i] != -21) { fprintf(stderr, "check failed.\n"); break; }
+            for(int i = 0; i < width * height / 4; ++i) if (u[i] != 126) { fprintf(stderr, "check failed.\n"); break; }
+            for(int i = 0; i < width * height / 4; ++i) if (v[i] != -128) { fprintf(stderr, "check failed.\n"); break; }
         }
     }
+}
 
-    _aligned_free(src);
-    _aligned_free(y);
-    _aligned_free(u);
-    _aligned_free(v);
+int main() {
+    fprintf(stderr, "%s", "Reuse opencl buffer?\n");
+    scanf("%d", &reuseBuffer_);
 
+    struct {
+        const char* msg;
+        int flags;
+        int allocType;
+    } items[] = {
+        { "Regular memory, device buffer, copy", BM_DEVICE | BM_COPY, 0 },
+        { "Regular memory, device buffer, map", BM_DEVICE | BM_MAP, 0 },
+        { "Regular memory, host buffer, copy", BM_HOST | BM_MAP, 0 },
+        { "Regular memory, host buffer, map", BM_HOST | BM_MAP, 0 },
+        { "Regular memory, direct", BM_USE_HOST, 0 },
+        { "Aligned memory, direct", BM_USE_HOST, 1 },
+        { "Pinned memory, device buffer, copy", BM_DEVICE | BM_COPY, 2 },
+        { "Pinned memory, host buffer, copy", BM_HOST | BM_COPY, 2 },
+        { 0, 0, 0 }
+    };
+
+    int i = 0;
+    for(;; ++i) {
+        if (items[i].msg == 0) break;
+        fprintf(stderr, "%d: %s\n", i, items[i].msg);
+
+        int memtype = i;
+        //scanf("%d", &memtype);
+        bufferMode_ = items[memtype].flags;
+
+        switch(items[memtype].allocType) {
+            case 0: test<RegularMemory>(); break;
+            case 1: test<AlignedMemory>(); break;
+            case 2: test<PinnedMemory>(); break;
+        }
+    }
     return 0;
 }
