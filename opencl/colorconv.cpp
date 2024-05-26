@@ -18,6 +18,17 @@ namespace {
     cl::Program program_;
     size_t gmemAlign_ = 4;
     bool reuseBuffer_ = true;
+
+    void* (*mymemcpy)(void* dst, const void* src, size_t size) = memcpy;
+
+    void* no_memcpy(void* dst, const void* src, size_t size) {
+        auto ps = (const char*)src;
+        auto pd = (char*)dst;
+        for(size_t i = 0; i < size; i += gmemAlign_) {
+            pd[i] = ps[i];
+        }
+        return dst;
+    }
     
     const int BM_USE_HOST = 0b00000001;
     const int BM_DEVICE   = 0b00000010;
@@ -171,7 +182,7 @@ namespace {
                         queue_.enqueueWriteBuffer(buffer_, false, 0, size_, ptr);
                     else if (localBufferMode_ & BM_MAP) {
                         auto mapped = (void*)queue_.enqueueMapBuffer(buffer_, true, CL_MAP_WRITE, 0, size_);
-                        memcpy(mapped, hostPtr_, size_);
+                        (*mymemcpy)(mapped, hostPtr_, size_);
                         queue_.enqueueUnmapMemObject(buffer_, mapped);
                     }
                 }
@@ -198,7 +209,7 @@ namespace {
                         queue_.enqueueReadBuffer(buffer_, true, 0, size_, hostPtr_);
                     else if (localBufferMode_ & BM_MAP) {
                         auto mapped = (void*)queue_.enqueueMapBuffer(buffer_, true, CL_MAP_READ, 0, size_);
-                        memcpy(hostPtr_, mapped, size_);
+                        (*mymemcpy)(hostPtr_, mapped, size_);
                         queue_.enqueueUnmapMemObject(buffer_, mapped);
                     }
 
@@ -510,8 +521,12 @@ void test() {
 }
 
 int main() {
-    fprintf(stderr, "%s", "Reuse opencl buffer?\n");
-    scanf("%d", &reuseBuffer_);
+    fprintf(stderr, "%s", "Reuse opencl buffer? (0, 1), skip memcpy? (0, 1)\n");
+    int skipmemcpy = 0;
+    scanf("%d %d", &reuseBuffer_, &skipmemcpy);
+
+    if (skipmemcpy)
+        mymemcpy = &no_memcpy;
 
     struct {
         const char* msg;
@@ -520,7 +535,7 @@ int main() {
     } items[] = {
         { "Regular memory, device buffer, copy", BM_DEVICE | BM_COPY, 0 },
         { "Regular memory, device buffer, map", BM_DEVICE | BM_MAP, 0 },
-        { "Regular memory, host buffer, copy", BM_HOST | BM_MAP, 0 },
+        { "Regular memory, host buffer, copy", BM_HOST | BM_COPY, 0 },
         { "Regular memory, host buffer, map", BM_HOST | BM_MAP, 0 },
         { "Regular memory, direct", BM_USE_HOST, 0 },
         { "Aligned memory, device buffer, copy", BM_DEVICE | BM_COPY, 1 },
@@ -533,10 +548,11 @@ int main() {
     int i = 0;
     for(;; ++i) {
         if (items[i].msg == 0) break;
+        if (skipmemcpy && !(items[i].flags & BM_MAP)) continue;
+        if (reuseBuffer_ && items[i].flags & BM_USE_HOST) continue;
         fprintf(stderr, "%d: %s\n", i, items[i].msg);
-    }
         int memtype = i;
-        scanf("%d", &memtype);
+        // scanf("%d", &memtype);
         bufferMode_ = items[memtype].flags;
 
         switch(items[memtype].allocType) {
@@ -544,5 +560,6 @@ int main() {
             case 1: test<AlignedMemory>(); break;
             case 2: test<PinnedMemory>(); break;
         }
+    }
     return 0;
 }
