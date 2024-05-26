@@ -523,6 +523,7 @@ int main() {
         { "Regular memory, host buffer, copy", BM_HOST | BM_MAP, 0 },
         { "Regular memory, host buffer, map", BM_HOST | BM_MAP, 0 },
         { "Regular memory, direct", BM_USE_HOST, 0 },
+        { "Aligned memory, device buffer, copy", BM_DEVICE | BM_COPY, 1 },
         { "Aligned memory, direct", BM_USE_HOST, 1 },
         { "Pinned memory, device buffer, copy", BM_DEVICE | BM_COPY, 2 },
         { "Pinned memory, host buffer, copy", BM_HOST | BM_COPY, 2 },
@@ -533,9 +534,9 @@ int main() {
     for(;; ++i) {
         if (items[i].msg == 0) break;
         fprintf(stderr, "%d: %s\n", i, items[i].msg);
-
+    }
         int memtype = i;
-        //scanf("%d", &memtype);
+        scanf("%d", &memtype);
         bufferMode_ = items[memtype].flags;
 
         switch(items[memtype].allocType) {
@@ -543,6 +544,5 @@ int main() {
             case 1: test<AlignedMemory>(); break;
             case 2: test<PinnedMemory>(); break;
         }
-    }
     return 0;
 }
