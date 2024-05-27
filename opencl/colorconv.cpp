@@ -655,10 +655,10 @@ int main() {
         if (skipmemcpy && !(items[i].flags & BM_MAP)) continue;
         if (reuseBuffer_ && (items[i].flags & BM_USE_HOST)) continue;
         if (!supportSvm_ && (items[i].flags & BM_SVM)) continue;
-        if (i != 2 && i != 3) continue;
         fprintf(stderr, "%d: %s\n", i, items[i].msg);
+    }
         int memtype = i;
-        //scanf("%d", &memtype);
+        scanf("%d", &memtype);
         bufferMode_ = items[memtype].flags;
 
         auto innerSwitch = [&](auto t) {
@@ -675,7 +675,6 @@ int main() {
         } else {
             innerSwitch(cl::Buffer{});
         }
-    }
 
     pool_.limitLength(0);
     return 0;
