@@ -18,6 +18,7 @@ namespace {
     cl::Program program_;
     size_t gmemAlign_ = 4;
     bool reuseBuffer_ = true;
+    bool supportSvm_ = false;
 
     void* (*mymemcpy)(void* dst, const void* src, size_t size) = memcpy;
 
@@ -152,7 +153,7 @@ namespace {
                 }
             }
 
-            return clSVMAlloc(ctx_(), CL_MEM_READ_WRITE, size, cl_mem_align());
+            return clSVMAlloc(ctx_(), CL_MEM_READ_WRITE, size, 0);
         }
 
         void limitLength(int len) {
@@ -193,6 +194,8 @@ namespace {
             auto addr = (intptr_t)ptr;
             flags_ = isWrite_ ? (CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY) : (CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY);
             
+            LockHostPtr();
+
             if (localBufferMode_ & BM_USE_HOST) {
                 buffer_ = cl::Buffer{ ctx_, CL_MEM_USE_HOST_PTR | flags_, size_, ptr };
             }
@@ -225,6 +228,30 @@ namespace {
                     }
                 }
             }
+
+            UnlockHostPtr();
+        }
+
+        void LockHostPtr()
+        {
+            // for(int i = 0; i < 2; ++i) {
+            //     BOOL ret = VirtualLock(hostPtr_, size_);
+            //     DWORD le = GetLastError();
+            //     if (ret)
+            //         break;
+            //     SIZE_T minsize, maxsize;
+            //     ret = GetProcessWorkingSetSize(GetCurrentProcess(), &minsize, &maxsize);
+            //     le = GetLastError();
+            //     minsize += size_;
+            //     maxsize += size_;
+            //     ret = SetProcessWorkingSetSize(GetCurrentProcess(), minsize, maxsize);
+            //     le = GetLastError();
+            // }
+        }
+
+        void UnlockHostPtr()
+        {
+            // VirtualUnlock(hostPtr_, size_);
         }
     public:
         CCClBuffer(void* ptr, size_t size, bool isWrite) {
@@ -236,6 +263,8 @@ namespace {
         }
 
         ~CCClBuffer() {
+            LockHostPtr();
+
             if (isWrite_) {
                 if (localBufferMode_ & BM_SVM) {
                     cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, svmPtr_, size_, 0, nullptr, nullptr);
@@ -265,6 +294,8 @@ namespace {
             if (localBufferMode_ & BM_SVM) {
                 pool_.release(svmPtr_, size_);
             }
+
+            UnlockHostPtr();
         }
 
         operator cl::Buffer& () {
@@ -295,9 +326,6 @@ public:
 
                 for (auto& d : devices) {
                     platdevlist.emplace_back(std::make_tuple(p, d));
-                    auto iGPU = false;
-                    iGPU = iGPU || p.getInfo<CL_PLATFORM_NAME>().find("Intel") != std::string::npos;
-                    iGPU = iGPU || (p.getInfo<CL_PLATFORM_NAME>().find("AMD") != std::string::npos && d.getInfo<CL_DEVICE_NAME>().find("gfx") != std::string::npos);
 
                     cl::size_type retval;
                     cl::size_type retsize;
@@ -325,6 +353,7 @@ public:
         ctx_ = cl::Context(cl::vector<cl::Device>{ std::get<1>(selected) });
         queue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
         gmemAlign_ = std::get<1>(selected).getInfo<CL_DEVICE_MEM_BASE_ADDR_ALIGN>();
+        supportSvm_ = !!std::get<1>(selected).getInfo<CL_DEVICE_SVM_CAPABILITIES>();
 
         std::string sourcecode{ R"OPENCLCODE(
             kernel void bgra_to_i420_frame(
@@ -611,10 +640,12 @@ int main() {
     for(;; ++i) {
         if (items[i].msg == 0) break;
         if (skipmemcpy && !(items[i].flags & BM_MAP)) continue;
-        if (reuseBuffer_ && items[i].flags & BM_USE_HOST) continue;
+        if (reuseBuffer_ && (items[i].flags & BM_USE_HOST)) continue;
+        if (!supportSvm_ && (items[i].flags & BM_SVM)) continue;
         fprintf(stderr, "%d: %s\n", i, items[i].msg);
+    }
         int memtype = i;
-        // scanf("%d", &memtype);
+        scanf("%d", &memtype);
         bufferMode_ = items[memtype].flags;
 
         auto innerSwitch = [&](auto t) {
@@ -631,7 +662,6 @@ int main() {
         } else {
             innerSwitch(cl::Buffer{});
         }
-    }
 
     pool_.limitLength(0);
     return 0;
