@@ -203,11 +203,17 @@ namespace {
                 if (localBufferMode_ & BM_SVM) {
                     svmPtr_ = pool_.retainsvm(size_);
                     if (isWrite_ == false) {
-                        cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_WRITE_INVALIDATE_REGION, svmPtr_, size_, 0, nullptr, nullptr);
-                        assert(ret == CL_SUCCESS);
-                        (*mymemcpy)(svmPtr_, hostPtr_, size_);
-                        ret = clEnqueueSVMUnmap(queue_(), svmPtr_, 0, nullptr, nullptr);
-                        assert(ret == CL_SUCCESS);
+                        if (localBufferMode_ & BM_COPY) {
+                            auto ret = clEnqueueSVMMemcpy(queue_(), false, svmPtr_, hostPtr_, size_, 0, nullptr, nullptr);
+                            assert(ret == CL_SUCCESS);
+                        }
+                        else if (localBufferMode_ & BM_MAP) {
+                            cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_WRITE_INVALIDATE_REGION, svmPtr_, size_, 0, nullptr, nullptr);
+                            assert(ret == CL_SUCCESS);
+                            (*mymemcpy)(svmPtr_, hostPtr_, size_);
+                            ret = clEnqueueSVMUnmap(queue_(), svmPtr_, 0, nullptr, nullptr);
+                            assert(ret == CL_SUCCESS);
+                        }
                     }
                 } else {
                     if (localBufferMode_ & BM_DEVICE) {
@@ -267,11 +273,17 @@ namespace {
 
             if (isWrite_) {
                 if (localBufferMode_ & BM_SVM) {
-                    cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, svmPtr_, size_, 0, nullptr, nullptr);
-                    assert(ret == CL_SUCCESS);
-                    (*mymemcpy)(hostPtr_, svmPtr_, size_);
-                    ret = clEnqueueSVMUnmap(queue_(), svmPtr_, 0, nullptr, nullptr);
-                    assert(ret == CL_SUCCESS);
+                    if (localBufferMode_ & BM_COPY) {
+                        auto ret = clEnqueueSVMMemcpy(queue_(), true, hostPtr_, svmPtr_, size_, 0, nullptr, nullptr);
+                        assert(ret == CL_SUCCESS);    
+                    }
+                    else if (localBufferMode_ & BM_MAP) {
+                        cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, svmPtr_, size_, 0, nullptr, nullptr);
+                        assert(ret == CL_SUCCESS);
+                        (*mymemcpy)(hostPtr_, svmPtr_, size_);
+                        ret = clEnqueueSVMUnmap(queue_(), svmPtr_, 0, nullptr, nullptr);
+                        assert(ret == CL_SUCCESS);
+                    }
                 }
                 else if (localBufferMode_ & BM_USE_HOST) {
                     // 同步数据刷一下
@@ -625,6 +637,7 @@ int main() {
     } items[] = {
         { "Regular memory, device buffer, copy", BM_DEVICE | BM_COPY, 0 },
         { "Regular memory, device buffer, map", BM_DEVICE | BM_MAP, 0 },
+        { "Regular memory, svm buffer, copy", BM_SVM | BM_COPY, 0 },
         { "Regular memory, svm buffer, map", BM_SVM | BM_MAP, 0 },
         { "Regular memory, host buffer, copy", BM_HOST | BM_COPY, 0 },
         { "Regular memory, host buffer, map", BM_HOST | BM_MAP, 0 },
@@ -642,10 +655,10 @@ int main() {
         if (skipmemcpy && !(items[i].flags & BM_MAP)) continue;
         if (reuseBuffer_ && (items[i].flags & BM_USE_HOST)) continue;
         if (!supportSvm_ && (items[i].flags & BM_SVM)) continue;
+        if (i != 2 && i != 3) continue;
         fprintf(stderr, "%d: %s\n", i, items[i].msg);
-    }
         int memtype = i;
-        scanf("%d", &memtype);
+        //scanf("%d", &memtype);
         bufferMode_ = items[memtype].flags;
 
         auto innerSwitch = [&](auto t) {
@@ -662,6 +675,7 @@ int main() {
         } else {
             innerSwitch(cl::Buffer{});
         }
+    }
 
     pool_.limitLength(0);
     return 0;
