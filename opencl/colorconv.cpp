@@ -9,7 +9,7 @@
 #include <optional>
 #include <numeric>
 #include <windows.h>
-
+#include <assert.h>
 
 namespace {
     bool available_ = false;
@@ -33,8 +33,9 @@ namespace {
     const int BM_USE_HOST = 0b00000001;
     const int BM_DEVICE   = 0b00000010;
     const int BM_HOST     = 0b00000100;
-    const int BM_COPY     = 0b00001000;
-    const int BM_MAP      = 0b00010000;
+    const int BM_SVM      = 0b00001000;
+    const int BM_COPY     = 0b00010000;
+    const int BM_MAP      = 0b00100000;
     int bufferMode_ = BM_DEVICE | BM_COPY;
 
     size_t cl_mem_align() {
@@ -121,6 +122,7 @@ namespace {
     class BufferPool {
         struct Item {
             cl::Buffer buffer;
+            void* svmPtr;
             size_t flags;
             size_t size;
         };
@@ -129,8 +131,9 @@ namespace {
     public:
         cl::Buffer retain(size_t flags, size_t size) {
             for(auto it = pool.begin(); it != pool.end(); ++it) {
-                if (it->flags == flags && it->size == size) {
-                    cl::Buffer retval = it->buffer;
+                if (it->flags == flags && it->size == size && it->svmPtr == nullptr) {
+                    cl::Buffer retval;
+                    std::swap(retval, it->buffer);
                     pool.erase(it);
                     return retval;
                 }
@@ -139,18 +142,42 @@ namespace {
             return cl::Buffer(ctx_, flags, size);
         }
 
-        void release(cl::Buffer& buffer, size_t flags, size_t size) {
-            if (!reuseBuffer_) return;
-            pool.push_front({ buffer, flags, size });
-            while (pool.size() > 8) {
+        void* retainsvm(size_t size) {
+            for(auto it = pool.begin(); it != pool.end(); ++it) {
+                if (it->size == size && it->svmPtr != nullptr) {
+                    void* retval = nullptr;
+                    std::swap(retval, it->svmPtr);
+                    pool.erase(it);
+                    return retval;
+                }
+            }
+
+            return clSVMAlloc(ctx_(), CL_MEM_READ_WRITE, size, cl_mem_align());
+        }
+
+        void limitLength(int len) {
+            while (pool.size() > len) {
+                if (pool.back().svmPtr)
+                    clSVMFree(ctx_(), pool.back().svmPtr);
                 pool.pop_back();
             }
+        }
+
+        void release(cl::Buffer& buffer, size_t flags, size_t size) {
+            pool.push_front({ buffer, nullptr, flags, size });
+            limitLength(reuseBuffer_ ? 8 : 0);
+        }
+
+        void release(void* svmptr, size_t size) {
+            pool.push_front({ {}, svmptr, 0, size });
+            limitLength(reuseBuffer_ ? 8 : 0);
         }
     } pool_;
 
     class CCClBuffer {
         size_t size_;
         cl::Buffer buffer_;
+        void* svmPtr_;
         size_t flags_;
         void* hostPtr_;
 
@@ -170,20 +197,31 @@ namespace {
                 buffer_ = cl::Buffer{ ctx_, CL_MEM_USE_HOST_PTR | flags_, size_, ptr };
             }
             else {
-                if (localBufferMode_ & BM_DEVICE) {
-                } else if (localBufferMode_ == BM_HOST) {
-                    flags_ |= CL_MEM_ALLOC_HOST_PTR;
-                }
+                if (localBufferMode_ & BM_SVM) {
+                    svmPtr_ = pool_.retainsvm(size_);
+                    if (isWrite_ == false) {
+                        cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_WRITE_INVALIDATE_REGION, svmPtr_, size_, 0, nullptr, nullptr);
+                        assert(ret == CL_SUCCESS);
+                        (*mymemcpy)(svmPtr_, hostPtr_, size_);
+                        ret = clEnqueueSVMUnmap(queue_(), svmPtr_, 0, nullptr, nullptr);
+                        assert(ret == CL_SUCCESS);
+                    }
+                } else {
+                    if (localBufferMode_ & BM_DEVICE) {
+                    } else if (localBufferMode_ == BM_HOST) {
+                        flags_ |= CL_MEM_ALLOC_HOST_PTR;
+                    }
 
-                buffer_ = pool_.retain(flags_, size_);
+                    buffer_ = pool_.retain(flags_, size_);
 
-                if (isWrite_ == false) {
-                    if (localBufferMode_ & BM_COPY)
-                        queue_.enqueueWriteBuffer(buffer_, false, 0, size_, ptr);
-                    else if (localBufferMode_ & BM_MAP) {
-                        auto mapped = (void*)queue_.enqueueMapBuffer(buffer_, true, CL_MAP_WRITE, 0, size_);
-                        (*mymemcpy)(mapped, hostPtr_, size_);
-                        queue_.enqueueUnmapMemObject(buffer_, mapped);
+                    if (isWrite_ == false) {
+                        if (localBufferMode_ & BM_COPY)
+                            queue_.enqueueWriteBuffer(buffer_, false, 0, size_, ptr);
+                        else if (localBufferMode_ & BM_MAP) {
+                            auto mapped = (void*)queue_.enqueueMapBuffer(buffer_, true, CL_MAP_WRITE_INVALIDATE_REGION, 0, size_);
+                            (*mymemcpy)(mapped, hostPtr_, size_);
+                            queue_.enqueueUnmapMemObject(buffer_, mapped);
+                        }
                     }
                 }
             }
@@ -199,7 +237,14 @@ namespace {
 
         ~CCClBuffer() {
             if (isWrite_) {
-                if (localBufferMode_ & BM_USE_HOST) {
+                if (localBufferMode_ & BM_SVM) {
+                    cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, svmPtr_, size_, 0, nullptr, nullptr);
+                    assert(ret == CL_SUCCESS);
+                    (*mymemcpy)(hostPtr_, svmPtr_, size_);
+                    ret = clEnqueueSVMUnmap(queue_(), svmPtr_, 0, nullptr, nullptr);
+                    assert(ret == CL_SUCCESS);
+                }
+                else if (localBufferMode_ & BM_USE_HOST) {
                     // 同步数据刷一下
                     void* hostptr = queue_.enqueueMapBuffer(buffer_, true, CL_MAP_READ, 0, size_);
                     queue_.enqueueUnmapMemObject(buffer_, hostptr);
@@ -216,10 +261,18 @@ namespace {
                     pool_.release(buffer_, flags_, size_);
                 }
             }
+
+            if (localBufferMode_ & BM_SVM) {
+                pool_.release(svmPtr_, size_);
+            }
         }
 
         operator cl::Buffer& () {
             return buffer_;
+        }
+
+        operator void* () {
+            return svmPtr_;
         }
     };
 };
@@ -359,6 +412,7 @@ std::optional<std::tuple<cl_float4, cl_float4, cl_float4, cl_uchar2, cl_uchar2>>
 }
 
 
+template<class BufferT>
 bool opencl_bgra_to_i420_frame(
     size_t width, size_t height,
     const void* src, size_t stride,
@@ -370,11 +424,18 @@ bool opencl_bgra_to_i420_frame(
         return false;
 
     auto func = cl::KernelFunctor<
-        cl::Buffer, cl_uint,
-        cl::Buffer, cl_uint, cl::Buffer, cl_uint, cl::Buffer, cl_uint,
+        BufferT, cl_uint,
+        BufferT, cl_uint, BufferT, cl_uint, BufferT, cl_uint,
         cl_float4, cl_float4, cl_float4,
         cl_uchar2, cl_uchar2>
         (program_, "bgra_to_i420_frame");
+
+    // auto func = cl::KernelFunctor<
+    //     void*, cl_uint,
+    //     void*, cl_uint, void*, cl_uint, void*, cl_uint,
+    //     cl_float4, cl_float4, cl_float4,
+    //     cl_uchar2, cl_uchar2>
+    //     (program_, "bgra_to_i420_frame");
 
     auto factors = GetRGB2YUVFactor();
     if (!factors)
@@ -386,7 +447,7 @@ bool opencl_bgra_to_i420_frame(
         ybuf{ dstY, height * strideY, true },
         ubuf{ dstU, height / 2 * strideU, true },
         vbuf{ dstV, height / 2 * strideV, true };
-
+    
     func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2)),
         srcbuf, (cl_uint)stride, ybuf, (cl_uint)strideY, ubuf, (cl_uint)strideU, vbuf, (cl_uint)strideV,
         yfactor, ufactor, vfactor,
@@ -467,7 +528,7 @@ bool opencl_i420_to_bgra_frame(
     return true;
 }
 
-template<class MemT>
+template<class MemT, class BufferT>
 void test() {
     const int width = 1920;
     const int height = 1920;
@@ -503,7 +564,7 @@ void test() {
             break;
         // auto targetTime = begin + frames * std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)) / fps;
         // std::this_thread::sleep_until(targetTime);
-        opencl_bgra_to_i420_frame(width, height, 
+        opencl_bgra_to_i420_frame<BufferT>(width, height, 
             src, width * 4,
             y, width,
             u, width / 2,
@@ -535,6 +596,7 @@ int main() {
     } items[] = {
         { "Regular memory, device buffer, copy", BM_DEVICE | BM_COPY, 0 },
         { "Regular memory, device buffer, map", BM_DEVICE | BM_MAP, 0 },
+        { "Regular memory, svm buffer, map", BM_SVM | BM_MAP, 0 },
         { "Regular memory, host buffer, copy", BM_HOST | BM_COPY, 0 },
         { "Regular memory, host buffer, map", BM_HOST | BM_MAP, 0 },
         { "Regular memory, direct", BM_USE_HOST, 0 },
@@ -555,11 +617,22 @@ int main() {
         // scanf("%d", &memtype);
         bufferMode_ = items[memtype].flags;
 
-        switch(items[memtype].allocType) {
-            case 0: test<RegularMemory>(); break;
-            case 1: test<AlignedMemory>(); break;
-            case 2: test<PinnedMemory>(); break;
+        auto innerSwitch = [&](auto t) {
+            using T = decltype(t);
+            switch(items[memtype].allocType) {
+                case 0: test<RegularMemory, T>(); break;
+                case 1: test<AlignedMemory, T>(); break;
+                case 2: test<PinnedMemory, T>(); break;
+            }
+        };
+
+        if (items[memtype].flags & BM_SVM) {
+            innerSwitch((void*)nullptr);
+        } else {
+            innerSwitch(cl::Buffer{});
         }
     }
+
+    pool_.limitLength(0);
     return 0;
 }
