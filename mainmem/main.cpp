@@ -70,7 +70,7 @@ void DoTest(const char* name, std::atomic_int64_t* speedBps) {
 }
 
 int main(int, char**){
-    const int parallel = std::thread::hardware_concurrency();
+    const int parallel = 8; //std::thread::hardware_concurrency();
     std::vector<std::thread> t;
 
     printf("thread: %d\n", parallel);
