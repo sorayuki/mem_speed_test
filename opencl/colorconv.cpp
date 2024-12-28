@@ -286,7 +286,7 @@ namespace {
                     }
                 }
                 else if (localBufferMode_ & BM_USE_HOST) {
-                    // 同步数据刷一下
+                    // 确保opencl侧的读写已经完成了（kernel执行完了）
                     void* hostptr = queue_.enqueueMapBuffer(buffer_, true, CL_MAP_READ, 0, size_);
                     queue_.enqueueUnmapMemObject(buffer_, hostptr);
                 }
@@ -348,9 +348,10 @@ public:
         }
 
         for(int i = 0; i < platdevlist.size(); ++i) {
-            fprintf(stderr, "%d: platform: %s, device: %s %s\n", 
+            fprintf(stderr, "%d: platform: %s (%s), device: %s %s\n", 
                 i, 
                 std::get<0>(platdevlist[i]).getInfo<CL_PLATFORM_NAME>().c_str(),
+                std::get<0>(platdevlist[i]).getInfo<CL_PLATFORM_VERSION>().c_str(),
                 std::get<1>(platdevlist[i]).getInfo<CL_DEVICE_NAME>().c_str(),
                 is_igpu[i] ? "[MEM]" : "[GMEM]"
             );
@@ -381,11 +382,10 @@ public:
                 const int x = xd2 * 2;
                 const int y = yd2 * 2;
                 
-                __attribute__((opencl_unroll_hint))
                 for(int j = 0; j < 2; ++j) {
-                    __attribute__((opencl_unroll_hint))
+                    int lineoffset = (y + j) * stride;
                     for(int i = 0; i < 2; ++i) {
-                        float4 srcvec = convert_float4(vload4(x + i, src + (y + j) * stride));
+                        float4 srcvec = convert_float4(vload4(x + i, src + lineoffset));
                         srcvec.w = 1.0f;
                         dstY[(y + j) * strideY + (x + i)] = clamp(convert_uchar_sat(dot(srcvec, yfactor)), yrange.x, yrange.y);
                         if (i == 0 && j == 0) {
@@ -644,8 +644,10 @@ int main() {
         { "Regular memory, direct", BM_USE_HOST, 0 },
         { "Aligned memory, device buffer, copy", BM_DEVICE | BM_COPY, 1 },
         { "Aligned memory, direct", BM_USE_HOST, 1 },
+        { "Aligned memory, svm buffer, copy", BM_SVM | BM_COPY, 1 },
         { "Pinned memory, device buffer, copy", BM_DEVICE | BM_COPY, 2 },
         { "Pinned memory, host buffer, copy", BM_HOST | BM_COPY, 2 },
+        { "Pinned memory, svm buffer, copy", BM_SVM | BM_COPY, 2 },
         { 0, 0, 0 }
     };
 
