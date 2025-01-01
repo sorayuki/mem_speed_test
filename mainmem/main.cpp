@@ -9,7 +9,8 @@
 #include <chrono>
 #include <atomic>
 #include <thread>
-
+#include <random>
+#include <functional>
 #include <FastMemcpy_Avx.h>
 
 struct STD {
@@ -42,13 +43,30 @@ struct FastMemcpy {
     }
 };
 
-const size_t size = 64 * 1024 * 1024; // 64 MB
-const size_t loop = 300;
+struct TmpTest {
+    static void cpy(void* dst, const void* src, intptr_t size) {
+        auto ps = (const uint8_t*) src;
+        auto pd = (uint8_t*) dst;
+
+        int us = 0;
+        // 一个内存行一个内存行处理
+        for(int off = 0; off < size; off += 65536) {
+            // 先cache来源的内存行
+            for(int cl = 0; cl < 65536; cl += 64)
+                us += ps[off + cl];
+            // 复制
+            memcpy(pd + off, ps + off, 65536);
+        }
+    }
+};
+
+const size_t size = 1024 * 1024 * 1024; // 1024 MB
+const size_t loop = 30;
 
 template<class IMP>
 void DoTest(const char* name, std::atomic_int64_t* speedBps) {
-    void* src = _aligned_malloc(size, 32);
-    void* dst = _aligned_malloc(size, 32);
+    void* src = _aligned_malloc(size, 65536);
+    void* dst = _aligned_malloc(size, 65536);
     for(int i = 0; i < 3; ++i) // warm up
         memcpy(dst, src, size); // resolve page fault
 
@@ -70,18 +88,27 @@ void DoTest(const char* name, std::atomic_int64_t* speedBps) {
 }
 
 int main(int, char**){
-    const int parallel = 8; //std::thread::hardware_concurrency();
+    // const int parallel = std::thread::hardware_concurrency();
+    const int parallel = 8;
     std::vector<std::thread> t;
 
     printf("thread: %d\n", parallel);
 
-    std::atomic_int64_t memcpyBps{0}, simdppBps{0}, fastmemcpyBps{0};
+    std::atomic_int64_t memcpyBps{0}, simdppBps{0}, fastmemcpyBps{0}, tmptestBps{0};
 
     for(int i = 0; i < parallel; ++i)
         t.emplace_back([&]() {
-            DoTest<STD>("std::memcpy", &memcpyBps);
-            DoTest<SIMD>("simdpp", &simdppBps);
-            DoTest<FastMemcpy>("FastMemcpy", &fastmemcpyBps);
+            std::vector<std::function<void()>> funcs;
+
+            funcs.emplace_back([&]() { DoTest<STD>("std::memcpy", &memcpyBps); });
+            funcs.emplace_back([&]() { DoTest<SIMD>("simdpp", &simdppBps); });
+            funcs.emplace_back([&]() { DoTest<FastMemcpy>("FastMemcpy", &fastmemcpyBps); });
+            funcs.emplace_back([&]() { DoTest<TmpTest>("TmpTest", &tmptestBps); });
+
+            std::mt19937 mt(std::random_device{}());
+            std::shuffle(funcs.begin(), funcs.end(), mt);
+            for(auto& f: funcs)
+                f();
         });
 
     for(int i = 0; i < parallel; ++i)
@@ -92,6 +119,7 @@ int main(int, char**){
     printf("std::memcpy %g MB/S\n", memcpyBps.load() / 1048576.0);
     printf("simdpp %g MB/S\n", simdppBps.load() / 1048576.0);
     printf("FastMemcpy %g MB/S\n", fastmemcpyBps.load() / 1048576.0);
+    printf("TmpTest %g MB/S\n", tmptestBps.load() / 1048576.0);
 
     printf("%s", "End.\n");
 
