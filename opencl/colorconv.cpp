@@ -366,7 +366,8 @@ public:
         ctx_ = cl::Context(cl::vector<cl::Device>{ std::get<1>(selected) });
         queue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
         gmemAlign_ = std::get<1>(selected).getInfo<CL_DEVICE_MEM_BASE_ADDR_ALIGN>();
-        supportSvm_ = !!std::get<1>(selected).getInfo<CL_DEVICE_SVM_CAPABILITIES>();
+        auto svm_caps = std::get<1>(selected).getInfo<CL_DEVICE_SVM_CAPABILITIES>();
+        supportSvm_ = !!svm_caps;
 
         std::string sourcecode{ R"OPENCLCODE(
             kernel void bgra_to_i420_frame(
@@ -383,9 +384,8 @@ public:
                 const int y = yd2 * 2;
                 
                 for(int j = 0; j < 2; ++j) {
-                    int lineoffset = (y + j) * stride;
                     for(int i = 0; i < 2; ++i) {
-                        float4 srcvec = convert_float4(vload4(x + i, src + lineoffset));
+                        float4 srcvec = convert_float4(vload4(x + i, src + (y + j) * stride));
                         srcvec.w = 1.0f;
                         dstY[(y + j) * strideY + (x + i)] = clamp(convert_uchar_sat(dot(srcvec, yfactor)), yrange.x, yrange.y);
                         if (i == 0 && j == 0) {
