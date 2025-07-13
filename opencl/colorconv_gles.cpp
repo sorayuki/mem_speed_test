@@ -187,15 +187,15 @@ void processRegion(ivec2 topLeft) {
                     1.0  // Alpha component for range control
                 );
                 
-                if (dy == 0 && dx % 2 == 0) {
+                if (dy == 0 && i % 2 == 0) {
                     // Convert to YUV using vector dot product
                     vec3 yuv = rgbaToYuv(rgba);
                     
                     // Pack Y value
                     uint y_val = uint(clamp(yuv.x, 0.0, 255.0));
                     yPacked |= (y_val << (i * 8));
-                    uPacked |= (uint(clamp(yuv.y, 0.0, 255.0)) << (i * 4));
-                    vPacked |= (uint(clamp(yuv.z, 0.0, 255.0)) << (i * 4));
+                    uPacked |= (uint(clamp(yuv.y, 0.0, 255.0)) << ((dx + i) * 4));
+                    vPacked |= (uint(clamp(yuv.z, 0.0, 255.0)) << ((dx + i) * 4));
                 } else {
                     uint y_val = uint(clamp(rgbaToY(rgba), 0.0, 255.0));
                     yPacked |= (y_val << (i * 8));
