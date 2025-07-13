@@ -5,7 +5,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 project(opencltest)
 
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/OpenCL-SDK-v2024.05.08-Win-x64)
-list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/angle-x64)
+list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/angle-win-x64)
 # list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/mesa3d-24.3.2-devel-msvc)
 
 add_library(LibCL INTERFACE)
@@ -21,7 +21,6 @@ find_library(LIB_GLESV2 GLESv2 REQUIRED)
 find_path(INC_GLES GLES3/gl31.h REQUIRED)
 target_link_libraries(LibGLES INTERFACE ${LIB_EGL} ${LIB_GLESV2})
 target_include_directories(LibGLES INTERFACE ${INC_GLES})
-target_compile_definitions(LibGLES INTERFACE -DMESA_DEBUG=1)
 
 add_executable(test)
 target_sources(test PRIVATE main.cpp)
