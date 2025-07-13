@@ -1,10 +1,13 @@
 #include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <EGL/eglext_angle.h>
 #include <GLES3/gl31.h>
 #include <stdexcept>
 #include <string>
 #include <tuple>
 #include <vector>
 #include <cstring>
+#include <algorithm>
 
 class ColorConvGLES {
     EGLDisplay eglDisplay_ = EGL_NO_DISPLAY;
@@ -157,13 +160,18 @@ void processRegion(ivec2 topLeft) {
     // Process 8x2 region (16 pixels) - outputs exactly 16 Y, 4 U, 4 V samples
     // Each shader invocation processes one 8x2 block aligned to 4-byte boundaries
     
+    uint uPacked = 0u;
+    uint vPacked = 0u;
+
     // Process Y data - 16 pixels total (8 pixels x 2 rows)
-    for (int dy = 0; dy < 2 && topLeft.y + dy < height; dy++) {
+    #pragma unroll 2
+    for (int dy = 0; dy < 2; dy++) {
         // Process 8 pixels per row, write 2 uints (4 bytes each)
+        #pragma unroll 2
         for (int dx = 0; dx < 8; dx += 4) {
             uint yPacked = 0u;
-            
-            for (int i = 0; i < 4 && topLeft.x + dx + i < width; i++) {
+            #pragma unroll 4
+            for (int i = 0; i < 4; i++) {
                 int x = topLeft.x + dx + i;
                 int y = topLeft.y + dy;
                 
@@ -179,54 +187,24 @@ void processRegion(ivec2 topLeft) {
                     1.0  // Alpha component for range control
                 );
                 
-                // Convert to YUV using vector dot product
-                vec3 yuv = rgbaToYuv(rgba);
-                
-                // Pack Y value
-                uint y_val = uint(clamp(yuv.x, 0.0, 255.0));
-                yPacked |= (y_val << (i * 8));
+                if (dy == 0 && dx % 2 == 0) {
+                    // Convert to YUV using vector dot product
+                    vec3 yuv = rgbaToYuv(rgba);
+                    
+                    // Pack Y value
+                    uint y_val = uint(clamp(yuv.x, 0.0, 255.0));
+                    yPacked |= (y_val << (i * 8));
+                    uPacked |= (uint(clamp(yuv.y, 0.0, 255.0)) << (i * 4));
+                    vPacked |= (uint(clamp(yuv.z, 0.0, 255.0)) << (i * 4));
+                } else {
+                    uint y_val = uint(clamp(rgbaToY(rgba), 0.0, 255.0));
+                    yPacked |= (y_val << (i * 8));
+                }
             }
             
             // Write Y data (4 bytes at once)
             int yIdx = ((topLeft.y + dy) * outputYStride + topLeft.x + dx) / 4;
             outputYData[yIdx] = yPacked;
-        }
-    }
-    
-    // Process U and V data - 4 samples each from 8x2 block (2x2 subsampling)
-    uint uPacked = 0u;
-    uint vPacked = 0u;
-    
-    for (int dy = 0; dy < 2; dy += 2) {
-        for (int dx = 0; dx < 8; dx += 2) {
-            int x = topLeft.x + dx;
-            int y = topLeft.y + dy;
-            
-            if (x < width && y < height) {
-                // Get input pixel from top-left of 2x2 block
-                int inputIdx = (y * inputStride + x * 4) / 4;
-                uint pixel = inputData[inputIdx];
-                
-                // Unpack RGBA to float vec4
-                vec4 rgba = vec4(
-                    float((pixel >> 0) & 0xFFu),
-                    float((pixel >> 8) & 0xFFu),
-                    float((pixel >> 16) & 0xFFu),
-                    1.0  // Alpha component for range control
-                );
-                
-                // Convert to YUV using vector dot product
-                vec3 yuv = rgbaToYuv(rgba);
-                
-                // Pack U and V values
-                uint u_val = uint(clamp(yuv.y, 0.0, 255.0));
-                uint v_val = uint(clamp(yuv.z, 0.0, 255.0));
-                
-                // Calculate position in packed uint (4 samples from 8x2 -> 4 samples)
-                int uvPos = dx / 2;
-                uPacked |= (u_val << (uvPos * 8));
-                vPacked |= (v_val << (uvPos * 8));
-            }
         }
     }
     
@@ -292,11 +270,9 @@ void main() {
             // Vertex shader
             const char* vertexShaderSource = R"(#version 310 es
 in vec4 position;
-out vec2 texCoord;
 
 void main() {
     gl_Position = position;
-    texCoord = position.xy * 0.5 + 0.5;
 }
 )";
             
@@ -305,15 +281,11 @@ void main() {
 precision highp float;
 precision highp int;
 
-in vec2 texCoord;
-
 )" + std::string(sharedShaderCode) + R"(
 
 void main() {
-    // Map texture coordinates to 8x2 regions
-    ivec2 coord = ivec2(texCoord * vec2(width, height));
-    ivec2 topLeft = ivec2((coord.x / 8) * 8, (coord.y / 2) * 2);
-    
+    ivec2 topLeft = ivec2(gl_FragCoord.xy * vec2(8, 2));
+
     if (topLeft.x >= width || topLeft.y >= height) {
         discard;
     }
@@ -478,7 +450,7 @@ public:
             // Dispatch compute shader - each workgroup processes 8x2 region
             glDispatchCompute((width_ + 7) / 8, (height_ + 1) / 2, 1);
         } else {
-            glViewport(0, 0, width_, height_);
+            glViewport(0, 0, (width_ + 7) / 8, (height_ + 1) / 2);
             // Render fullscreen quad
             glBindVertexArray(vao_);
             glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);

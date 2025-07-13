@@ -158,3 +158,31 @@ Memory: DDR5 Single-Rank 16GB*2 5600MHz
 |Pinned |Regular  |R/WBuf|11.1      |           |11.1       |           |
 |Pinned |HostAlloc|R/WBuf|11.4      |           |11         |           |
 
+
+## OpenGL ES via libANGLE: Intel UHD Graphics (i9-13900HX)
+
+Reuse Shader Storage Buffer Object
+
+run 15 seconds, performance mode, max fan speed
+
+|InputBuffer   |Shader Type|FPS   |
+|--------------|-----------|------|
+|BufferSubData |Compute    |92.96 |
+|MapBufferRange|Compute    |141.73|
+|BufferSubData |Render     |102.20|
+|MapBufferRange|Render     |161.37|
+
+
+## OpenGL ES via libANGLE: Nvidia RTX 4090 laptop
+
+Reuse Shader Storage Buffer Object
+
+run 15 seconds, performance mode, max fan speed
+
+|InputBuffer   |Shader Type|FPS   |
+|--------------|-----------|------|
+|BufferSubData |Compute    |151.15|
+|MapBufferRange|Compute    |331.64|
+|BufferSubData |Render     |152.25|
+|MapBufferRange|Render     |374.64|
+
