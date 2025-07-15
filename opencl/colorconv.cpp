@@ -8,6 +8,8 @@
 #include <tuple>
 #include <optional>
 #include <numeric>
+#include <memory>
+#include <chrono>
 #include <windows.h>
 #include <assert.h>
 
@@ -118,205 +120,6 @@ namespace {
                 return hostPtr_[index];
             }
         };
-    };
-
-    class BufferPool {
-        struct Item {
-            cl::Buffer buffer;
-            void* svmPtr;
-            size_t flags;
-            size_t size;
-        };
-
-        std::list<Item> pool;
-    public:
-        cl::Buffer retain(size_t flags, size_t size) {
-            for(auto it = pool.begin(); it != pool.end(); ++it) {
-                if (it->flags == flags && it->size == size && it->svmPtr == nullptr) {
-                    cl::Buffer retval;
-                    std::swap(retval, it->buffer);
-                    pool.erase(it);
-                    return retval;
-                }
-            }
-
-            return cl::Buffer(ctx_, flags, size);
-        }
-
-        void* retainsvm(size_t size) {
-            for(auto it = pool.begin(); it != pool.end(); ++it) {
-                if (it->size == size && it->svmPtr != nullptr) {
-                    void* retval = nullptr;
-                    std::swap(retval, it->svmPtr);
-                    pool.erase(it);
-                    return retval;
-                }
-            }
-
-            return clSVMAlloc(ctx_(), CL_MEM_READ_WRITE, size, 0);
-        }
-
-        void limitLength(int len) {
-            while (pool.size() > len) {
-                if (pool.back().svmPtr)
-                    clSVMFree(ctx_(), pool.back().svmPtr);
-                pool.pop_back();
-            }
-        }
-
-        void release(cl::Buffer& buffer, size_t flags, size_t size) {
-            pool.push_front({ buffer, nullptr, flags, size });
-            limitLength(reuseBuffer_ ? 8 : 0);
-        }
-
-        void release(void* svmptr, size_t size) {
-            pool.push_front({ {}, svmptr, 0, size });
-            limitLength(reuseBuffer_ ? 8 : 0);
-        }
-    } pool_;
-
-    class CCClBuffer {
-        size_t size_;
-        cl::Buffer buffer_;
-        void* svmPtr_;
-        size_t flags_;
-        void* hostPtr_;
-
-        int localBufferMode_;
-        bool isWrite_ = false;
-
-        void Init(void* ptr, size_t size, bool isWrite) {
-            size_ = size;
-            isWrite_ = isWrite;
-            hostPtr_ = ptr;
-            localBufferMode_ = bufferMode_;
-
-            auto addr = (intptr_t)ptr;
-            flags_ = isWrite_ ? (CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY) : (CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY);
-            
-            LockHostPtr();
-
-            if (localBufferMode_ & BM_USE_HOST) {
-                buffer_ = cl::Buffer{ ctx_, CL_MEM_USE_HOST_PTR | flags_, size_, ptr };
-            }
-            else {
-                if (localBufferMode_ & BM_SVM) {
-                    svmPtr_ = pool_.retainsvm(size_);
-                    if (isWrite_ == false) {
-                        if (localBufferMode_ & BM_COPY) {
-                            auto ret = clEnqueueSVMMemcpy(queue_(), false, svmPtr_, hostPtr_, size_, 0, nullptr, nullptr);
-                            assert(ret == CL_SUCCESS);
-                        }
-                        else if (localBufferMode_ & BM_MAP) {
-                            cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_WRITE_INVALIDATE_REGION, svmPtr_, size_, 0, nullptr, nullptr);
-                            assert(ret == CL_SUCCESS);
-                            (*mymemcpy)(svmPtr_, hostPtr_, size_);
-                            ret = clEnqueueSVMUnmap(queue_(), svmPtr_, 0, nullptr, nullptr);
-                            assert(ret == CL_SUCCESS);
-                        }
-                    }
-                } else {
-                    if (localBufferMode_ & BM_DEVICE) {
-                    } else if (localBufferMode_ == BM_HOST) {
-                        flags_ |= CL_MEM_ALLOC_HOST_PTR;
-                    }
-
-                    buffer_ = pool_.retain(flags_, size_);
-
-                    if (isWrite_ == false) {
-                        if (localBufferMode_ & BM_COPY)
-                            queue_.enqueueWriteBuffer(buffer_, false, 0, size_, ptr);
-                        else if (localBufferMode_ & BM_MAP) {
-                            auto mapped = (void*)queue_.enqueueMapBuffer(buffer_, true, CL_MAP_WRITE_INVALIDATE_REGION, 0, size_);
-                            (*mymemcpy)(mapped, hostPtr_, size_);
-                            queue_.enqueueUnmapMemObject(buffer_, mapped);
-                        }
-                    }
-                }
-            }
-
-            UnlockHostPtr();
-        }
-
-        void LockHostPtr()
-        {
-            // for(int i = 0; i < 2; ++i) {
-            //     BOOL ret = VirtualLock(hostPtr_, size_);
-            //     DWORD le = GetLastError();
-            //     if (ret)
-            //         break;
-            //     SIZE_T minsize, maxsize;
-            //     ret = GetProcessWorkingSetSize(GetCurrentProcess(), &minsize, &maxsize);
-            //     le = GetLastError();
-            //     minsize += size_;
-            //     maxsize += size_;
-            //     ret = SetProcessWorkingSetSize(GetCurrentProcess(), minsize, maxsize);
-            //     le = GetLastError();
-            // }
-        }
-
-        void UnlockHostPtr()
-        {
-            // VirtualUnlock(hostPtr_, size_);
-        }
-    public:
-        CCClBuffer(void* ptr, size_t size, bool isWrite) {
-            Init(ptr, size, isWrite);
-        }
-
-        CCClBuffer(const void* ptr, size_t size) {
-            Init((void*)ptr, size, false);
-        }
-
-        ~CCClBuffer() {
-            LockHostPtr();
-
-            if (isWrite_) {
-                if (localBufferMode_ & BM_SVM) {
-                    if (localBufferMode_ & BM_COPY) {
-                        auto ret = clEnqueueSVMMemcpy(queue_(), true, hostPtr_, svmPtr_, size_, 0, nullptr, nullptr);
-                        assert(ret == CL_SUCCESS);    
-                    }
-                    else if (localBufferMode_ & BM_MAP) {
-                        cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, svmPtr_, size_, 0, nullptr, nullptr);
-                        assert(ret == CL_SUCCESS);
-                        (*mymemcpy)(hostPtr_, svmPtr_, size_);
-                        ret = clEnqueueSVMUnmap(queue_(), svmPtr_, 0, nullptr, nullptr);
-                        assert(ret == CL_SUCCESS);
-                    }
-                }
-                else if (localBufferMode_ & BM_USE_HOST) {
-                    // 确保opencl侧的读写已经完成了（kernel执行完了）
-                    void* hostptr = queue_.enqueueMapBuffer(buffer_, true, CL_MAP_READ, 0, size_);
-                    queue_.enqueueUnmapMemObject(buffer_, hostptr);
-                }
-                else {
-                    if (localBufferMode_ & BM_COPY)
-                        queue_.enqueueReadBuffer(buffer_, true, 0, size_, hostPtr_);
-                    else if (localBufferMode_ & BM_MAP) {
-                        auto mapped = (void*)queue_.enqueueMapBuffer(buffer_, true, CL_MAP_READ, 0, size_);
-                        (*mymemcpy)(hostPtr_, mapped, size_);
-                        queue_.enqueueUnmapMemObject(buffer_, mapped);
-                    }
-
-                    pool_.release(buffer_, flags_, size_);
-                }
-            }
-
-            if (localBufferMode_ & BM_SVM) {
-                pool_.release(svmPtr_, size_);
-            }
-
-            UnlockHostPtr();
-        }
-
-        operator cl::Buffer& () {
-            return buffer_;
-        }
-
-        operator void* () {
-            return svmPtr_;
-        }
     };
 };
 
@@ -452,122 +255,250 @@ std::optional<std::tuple<cl_float4, cl_float4, cl_float4, cl_uchar2, cl_uchar2>>
     return std::make_tuple(yfactor, ufactor, vfactor, yrange, uvrange);
 }
 
-
-template<class BufferT>
-bool opencl_bgra_to_i420_frame(
-    size_t width, size_t height,
-    const void* src, size_t stride,
-    void* dstY, size_t strideY,
-    void* dstU, size_t strideU,
-    void* dstV, size_t strideV
-) {
-    if (!available_)
-        return false;
-
-    auto func = cl::KernelFunctor<
-        BufferT, cl_uint,
-        BufferT, cl_uint, BufferT, cl_uint, BufferT, cl_uint,
-        cl_float4, cl_float4, cl_float4,
-        cl_uchar2, cl_uchar2>
-        (program_, "bgra_to_i420_frame");
-
-    // auto func = cl::KernelFunctor<
-    //     void*, cl_uint,
-    //     void*, cl_uint, void*, cl_uint, void*, cl_uint,
-    //     cl_float4, cl_float4, cl_float4,
-    //     cl_uchar2, cl_uchar2>
-    //     (program_, "bgra_to_i420_frame");
-
-    auto factors = GetRGB2YUVFactor();
-    if (!factors)
-        return false;
-
-    auto [yfactor, ufactor, vfactor, yrange, uvrange] = *factors;
-
-    CCClBuffer srcbuf{ src, stride * height },
-        ybuf{ dstY, height * strideY, true },
-        ubuf{ dstU, height / 2 * strideU, true },
-        vbuf{ dstV, height / 2 * strideV, true };
+// 预创建缓冲区的转换器类
+class BGRAToI420Converter {
+private:
+    size_t width_, height_;
+    size_t srcStride_, yStride_, uStride_, vStride_;
+    size_t srcSize_, ySize_, uSize_, vSize_;
+    int bufferMode_;
     
-    func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2)),
-        srcbuf, (cl_uint)stride, ybuf, (cl_uint)strideY, ubuf, (cl_uint)strideU, vbuf, (cl_uint)strideV,
-        yfactor, ufactor, vfactor,
-        yrange, uvrange
-    );
+    // 不同类型的缓冲区
+    std::unique_ptr<cl::Buffer> srcBuffer_, yBuffer_, uBuffer_, vBuffer_;
+    void* srcSvmPtr_ = nullptr;
+    void* ySvmPtr_ = nullptr;
+    void* uSvmPtr_ = nullptr;
+    void* vSvmPtr_ = nullptr;
+    
+    cl_float4 yfactor_, ufactor_, vfactor_;
+    cl_uchar2 yrange_, uvrange_;
+    
+    bool initBuffers() {
+        bufferMode_ = ::bufferMode_;
+        
+        // 计算各缓冲区大小
+        srcSize_ = srcStride_ * height_;
+        ySize_ = yStride_ * height_;
+        uSize_ = uStride_ * height_ / 2;
+        vSize_ = vStride_ * height_ / 2;
+        
+        if (bufferMode_ & BM_SVM) {
+            // SVM模式
+            srcSvmPtr_ = clSVMAlloc(ctx_(), CL_MEM_READ_WRITE, srcSize_, 0);
+            ySvmPtr_ = clSVMAlloc(ctx_(), CL_MEM_READ_WRITE, ySize_, 0);
+            uSvmPtr_ = clSVMAlloc(ctx_(), CL_MEM_READ_WRITE, uSize_, 0);
+            vSvmPtr_ = clSVMAlloc(ctx_(), CL_MEM_READ_WRITE, vSize_, 0);
+            
+            if (!srcSvmPtr_ || !ySvmPtr_ || !uSvmPtr_ || !vSvmPtr_) {
+                cleanup();
+                return false;
+            }
+        } else if (bufferMode_ & BM_USE_HOST) {
+            // USE_HOST模式 - 缓冲区将在execute时创建
+            return true;
+        } else {
+            // DEVICE或HOST模式
+            size_t srcFlags = CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY;
+            size_t dstFlags = CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY;
+            
+            if (bufferMode_ & BM_HOST) {
+                srcFlags |= CL_MEM_ALLOC_HOST_PTR;
+                dstFlags |= CL_MEM_ALLOC_HOST_PTR;
+            }
+            
+            srcBuffer_ = std::make_unique<cl::Buffer>(ctx_, srcFlags, srcSize_);
+            yBuffer_ = std::make_unique<cl::Buffer>(ctx_, dstFlags, ySize_);
+            uBuffer_ = std::make_unique<cl::Buffer>(ctx_, dstFlags, uSize_);
+            vBuffer_ = std::make_unique<cl::Buffer>(ctx_, dstFlags, vSize_);
+        }
+        
+        return true;
+    }
+    
+    void cleanup() {
+        if (bufferMode_ & BM_SVM) {
+            if (srcSvmPtr_) clSVMFree(ctx_(), srcSvmPtr_);
+            if (ySvmPtr_) clSVMFree(ctx_(), ySvmPtr_);
+            if (uSvmPtr_) clSVMFree(ctx_(), uSvmPtr_);
+            if (vSvmPtr_) clSVMFree(ctx_(), vSvmPtr_);
+            
+            srcSvmPtr_ = ySvmPtr_ = uSvmPtr_ = vSvmPtr_ = nullptr;
+        }
+    }
+    
+public:
+    BGRAToI420Converter(size_t width, size_t height, 
+                        size_t srcStride, size_t yStride, 
+                        size_t uStride, size_t vStride)
+        : width_(width), height_(height)
+        , srcStride_(srcStride), yStride_(yStride)
+        , uStride_(uStride), vStride_(vStride)
+    {
+        auto factors = GetRGB2YUVFactor();
+        if (factors) {
+            std::tie(yfactor_, ufactor_, vfactor_, yrange_, uvrange_) = *factors;
+        }
+        
+        if (!initBuffers()) {
+            throw std::runtime_error("Failed to initialize OpenCL buffers");
+        }
+    }
+    
+    ~BGRAToI420Converter() {
+        cleanup();
+    }
+    
+    bool execute(const void* src, void* dstY, void* dstU, void* dstV) {
+        if (!available_) return false;
+        
+        if (bufferMode_ & BM_SVM) {
+            return executeSVM(src, dstY, dstU, dstV);
+        } else if (bufferMode_ & BM_USE_HOST) {
+            return executeUseHost(src, dstY, dstU, dstV);
+        } else {
+            return executeBuffer(src, dstY, dstU, dstV);
+        }
+    }
+    
+private:
+    bool executeSVM(const void* src, void* dstY, void* dstU, void* dstV) {
+        auto func = cl::KernelFunctor<
+            void*, cl_uint,
+            void*, cl_uint, void*, cl_uint, void*, cl_uint,
+            cl_float4, cl_float4, cl_float4,
+            cl_uchar2, cl_uchar2>
+            (program_, "bgra_to_i420_frame");
+        
+        // 复制输入数据到SVM
+        if (bufferMode_ & BM_COPY) {
+            auto ret = clEnqueueSVMMemcpy(queue_(), false, srcSvmPtr_, src, srcSize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+        } else if (bufferMode_ & BM_MAP) {
+            cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_WRITE_INVALIDATE_REGION, srcSvmPtr_, srcSize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            (*mymemcpy)(srcSvmPtr_, src, srcSize_);
+            ret = clEnqueueSVMUnmap(queue_(), srcSvmPtr_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+        }
+        
+        // 执行kernel
+        func(cl::EnqueueArgs(queue_, cl::NDRange(width_ / 2, height_ / 2)),
+            srcSvmPtr_, (cl_uint)srcStride_, 
+            ySvmPtr_, (cl_uint)yStride_, 
+            uSvmPtr_, (cl_uint)uStride_, 
+            vSvmPtr_, (cl_uint)vStride_,
+            yfactor_, ufactor_, vfactor_,
+            yrange_, uvrange_);
+        
+        // 复制输出数据
+        if (bufferMode_ & BM_COPY) {
+            auto ret = clEnqueueSVMMemcpy(queue_(), true, dstY, ySvmPtr_, ySize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            ret = clEnqueueSVMMemcpy(queue_(), true, dstU, uSvmPtr_, uSize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            ret = clEnqueueSVMMemcpy(queue_(), true, dstV, vSvmPtr_, vSize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+        } else if (bufferMode_ & BM_MAP) {
+            cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, ySvmPtr_, ySize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            (*mymemcpy)(dstY, ySvmPtr_, ySize_);
+            ret = clEnqueueSVMUnmap(queue_(), ySvmPtr_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            
+            ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, uSvmPtr_, uSize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            (*mymemcpy)(dstU, uSvmPtr_, uSize_);
+            ret = clEnqueueSVMUnmap(queue_(), uSvmPtr_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            
+            ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, vSvmPtr_, vSize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            (*mymemcpy)(dstV, vSvmPtr_, vSize_);
+            ret = clEnqueueSVMUnmap(queue_(), vSvmPtr_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+        }
+        
+        return true;
+    }
+    
+    bool executeUseHost(const void* src, void* dstY, void* dstU, void* dstV) {
+        auto func = cl::KernelFunctor<
+            cl::Buffer, cl_uint,
+            cl::Buffer, cl_uint, cl::Buffer, cl_uint, cl::Buffer, cl_uint,
+            cl_float4, cl_float4, cl_float4,
+            cl_uchar2, cl_uchar2>
+            (program_, "bgra_to_i420_frame");
+        
+        // 创建USE_HOST缓冲区
+        cl::Buffer srcBuf{ ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, srcSize_, (void*)src };
+        cl::Buffer yBuf{ ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, ySize_, dstY };
+        cl::Buffer uBuf{ ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, uSize_, dstU };
+        cl::Buffer vBuf{ ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, vSize_, dstV };
+        
+        func(cl::EnqueueArgs(queue_, cl::NDRange(width_ / 2, height_ / 2)),
+            srcBuf, (cl_uint)srcStride_, 
+            yBuf, (cl_uint)yStride_, 
+            uBuf, (cl_uint)uStride_, 
+            vBuf, (cl_uint)vStride_,
+            yfactor_, ufactor_, vfactor_,
+            yrange_, uvrange_);
+        
+        // 确保kernel执行完成
+        void* hostptr = queue_.enqueueMapBuffer(yBuf, true, CL_MAP_READ, 0, ySize_);
+        queue_.enqueueUnmapMemObject(yBuf, hostptr);
+        
+        return true;
+    }
+    
+    bool executeBuffer(const void* src, void* dstY, void* dstU, void* dstV) {
+        auto func = cl::KernelFunctor<
+            cl::Buffer, cl_uint,
+            cl::Buffer, cl_uint, cl::Buffer, cl_uint, cl::Buffer, cl_uint,
+            cl_float4, cl_float4, cl_float4,
+            cl_uchar2, cl_uchar2>
+            (program_, "bgra_to_i420_frame");
+        
+        // 输入数据传输
+        if (bufferMode_ & BM_COPY) {
+            queue_.enqueueWriteBuffer(*srcBuffer_, false, 0, srcSize_, src);
+        } else if (bufferMode_ & BM_MAP) {
+            auto mapped = (void*)queue_.enqueueMapBuffer(*srcBuffer_, true, CL_MAP_WRITE_INVALIDATE_REGION, 0, srcSize_);
+            (*mymemcpy)(mapped, src, srcSize_);
+            queue_.enqueueUnmapMemObject(*srcBuffer_, mapped);
+        }
+        
+        // 执行kernel
+        func(cl::EnqueueArgs(queue_, cl::NDRange(width_ / 2, height_ / 2)),
+            *srcBuffer_, (cl_uint)srcStride_, 
+            *yBuffer_, (cl_uint)yStride_, 
+            *uBuffer_, (cl_uint)uStride_, 
+            *vBuffer_, (cl_uint)vStride_,
+            yfactor_, ufactor_, vfactor_,
+            yrange_, uvrange_);
+        
+        // 输出数据传输
+        if (bufferMode_ & BM_COPY) {
+            queue_.enqueueReadBuffer(*yBuffer_, true, 0, ySize_, dstY);
+            queue_.enqueueReadBuffer(*uBuffer_, true, 0, uSize_, dstU);
+            queue_.enqueueReadBuffer(*vBuffer_, true, 0, vSize_, dstV);
+        } else if (bufferMode_ & BM_MAP) {
+            auto yMapped = (void*)queue_.enqueueMapBuffer(*yBuffer_, true, CL_MAP_READ, 0, ySize_);
+            (*mymemcpy)(dstY, yMapped, ySize_);
+            queue_.enqueueUnmapMemObject(*yBuffer_, yMapped);
+            
+            auto uMapped = (void*)queue_.enqueueMapBuffer(*uBuffer_, true, CL_MAP_READ, 0, uSize_);
+            (*mymemcpy)(dstU, uMapped, uSize_);
+            queue_.enqueueUnmapMemObject(*uBuffer_, uMapped);
+            
+            auto vMapped = (void*)queue_.enqueueMapBuffer(*vBuffer_, true, CL_MAP_READ, 0, vSize_);
+            (*mymemcpy)(dstV, vMapped, vSize_);
+            queue_.enqueueUnmapMemObject(*vBuffer_, vMapped);
+        }
+        
+        return true;
+    }
+};
 
-    return true;
-}
-
-
-bool opencl_nv12_to_bgra_frame(
-    size_t width, size_t height,
-    void* dst, size_t stride,
-    const void* srcY, size_t strideY,
-    const void* srcUV, size_t strideUV
-) {
-    if (!available_)
-        return false;
-
-    auto factors = GetYUV2RGBFactor();
-    if (!factors)
-        return false;
-
-    auto [rfactor, gfactor, bfactor] = *factors;
-
-    auto func = cl::KernelFunctor<
-        cl::Buffer, cl_uint,
-        cl::Buffer, cl_uint, cl::Buffer, cl_uint,
-        cl_float4, cl_float4, cl_float4>
-        (program_, "nv12_to_bgra_frame");
-
-    CCClBuffer dstbuf{ dst, stride * height, true },
-        ybuf{ srcY, height * strideY },
-        uvbuf{ srcUV, height / 2 * strideUV };
-
-    func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2)),
-        dstbuf, (cl_uint)stride, ybuf, (cl_uint)strideY, uvbuf, (cl_uint)strideUV,
-        rfactor, gfactor, bfactor
-    );
-
-    return true;
-}
-
-
-bool opencl_i420_to_bgra_frame(
-    const void* y, size_t strideY,
-    const void* u, size_t strideU,
-    const void* v, size_t strideV,
-    size_t width, size_t height,
-    size_t dst_stride, void* dst
-) {
-    if (!available_)
-        return false;
-
-    auto factors = GetYUV2RGBFactor();
-    if (!factors)
-        return false;
-
-    auto [rfactor, gfactor, bfactor] = *factors;
-
-    auto func = cl::KernelFunctor<
-        cl::Buffer, cl_uint,
-        cl::Buffer, cl_uint, cl::Buffer, cl_uint, cl::Buffer, cl_uint,
-        cl_float4, cl_float4, cl_float4>
-        (program_, "i420_to_bgra_frame");
-
-    CCClBuffer dstbuf{ dst, dst_stride * height, true },
-        ybuf{ y, strideY * height },
-        ubuf{ u, strideU * height / 2 },
-        vbuf{ v, strideV * height / 2 };
-
-    func(cl::EnqueueArgs(queue_, cl::NDRange(width / 2, height / 2)),
-        dstbuf, (cl_uint)dst_stride,
-        ybuf, (cl_uint)strideY, ubuf, (cl_uint)strideU, vbuf, (cl_uint)strideV,
-        rfactor, gfactor, bfactor
-    );
-
-    return true;
-}
 
 template<class MemT, class BufferT>
 void test() {
@@ -582,6 +513,9 @@ void test() {
     memset(y, 0, width * height);
     memset(u, 0, width * height / 4);
     memset(v, 0, width * height / 4);
+
+    // 创建转换器对象
+    BGRAToI420Converter converter(width, height, width * 4, width, width / 2, width / 2);
 
     auto begin = std::chrono::steady_clock::now();
     auto iter_begin = begin;
@@ -605,12 +539,10 @@ void test() {
             break;
         // auto targetTime = begin + frames * std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)) / fps;
         // std::this_thread::sleep_until(targetTime);
-        opencl_bgra_to_i420_frame<BufferT>(width, height, 
-            src, width * 4,
-            y, width,
-            u, width / 2,
-            v, width / 2
-        );
+        
+        // 使用转换器对象执行转换
+        converter.execute(src, y, u, v);
+        
         iter_frames += 1;
         frames += 1;
 
@@ -659,25 +591,25 @@ int main() {
         if (!supportSvm_ && (items[i].flags & BM_SVM)) continue;
         fprintf(stderr, "%d: %s\n", i, items[i].msg);
     }
-        int memtype = i;
-        scanf("%d", &memtype);
-        bufferMode_ = items[memtype].flags;
 
-        auto innerSwitch = [&](auto t) {
-            using T = decltype(t);
-            switch(items[memtype].allocType) {
-                case 0: test<RegularMemory, T>(); break;
-                case 1: test<AlignedMemory, T>(); break;
-                case 2: test<PinnedMemory, T>(); break;
-            }
-        };
+    int memtype = i;
+    scanf("%d", &memtype);
+    bufferMode_ = items[memtype].flags;
 
-        if (items[memtype].flags & BM_SVM) {
-            innerSwitch((void*)nullptr);
-        } else {
-            innerSwitch(cl::Buffer{});
+    auto innerSwitch = [&](auto t) {
+        using T = decltype(t);
+        switch(items[memtype].allocType) {
+            case 0: test<RegularMemory, T>(); break;
+            case 1: test<AlignedMemory, T>(); break;
+            case 2: test<PinnedMemory, T>(); break;
         }
+    };
 
-    pool_.limitLength(0);
+    if (items[memtype].flags & BM_SVM) {
+        innerSwitch((void*)nullptr);
+    } else {
+        innerSwitch(cl::Buffer{});
+    }
+
     return 0;
 }

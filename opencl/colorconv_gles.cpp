@@ -1491,7 +1491,7 @@ int main() try {
                 }
             };
             std::cout << "=== Testing OpenGL ES Version ===" << std::endl;
-            // do_test.template operator()<ColorConvGLES>();
+            do_test.template operator()<ColorConvGLES>();
 
             std::cout << "=== Testing D3D11 Version ===" << std::endl;
             do_test.template operator()<ColorConvD3D11>();
