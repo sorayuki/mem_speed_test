@@ -159,30 +159,30 @@ Memory: DDR5 Single-Rank 16GB*2 5600MHz
 |Pinned |HostAlloc|R/WBuf|11.4      |           |11         |           |
 
 
-## OpenGL ES via libANGLE: Intel UHD Graphics (i9-13900HX)
+## OpenGL ES via libANGLE / RAW D3D11: Intel UHD Graphics (i9-13900HX)
 
 Reuse Shader Storage Buffer Object
 
 run 15 seconds, performance mode, max fan speed
 
-|InputBuffer   |Shader Type|FPS   |
-|--------------|-----------|------|
-|BufferSubData |Compute    |92.96 |
-|MapBufferRange|Compute    |141.73|
-|BufferSubData |Render     |102.20|
-|MapBufferRange|Render     |161.37|
+|InputBuffer   |Shader Type|Angle |D3D11 |
+|--------------|-----------|------|------|
+|MapBufferRange|Compute    |115.89|173.94|
+|BufferSubData |Compute    |78.93 |29.12 |
+|MapBufferRange|Render     |151.81|226.44|
+|BufferSubData |Render     |95.27 |31.76 |
 
 
-## OpenGL ES via libANGLE: Nvidia RTX 4090 laptop
+## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 4090 laptop
 
 Reuse Shader Storage Buffer Object
 
 run 15 seconds, performance mode, max fan speed
 
-|InputBuffer   |Shader Type|FPS   |
-|--------------|-----------|------|
-|BufferSubData |Compute    |151.15|
-|MapBufferRange|Compute    |331.64|
-|BufferSubData |Render     |152.25|
-|MapBufferRange|Render     |374.64|
+|InputBuffer   |Shader Type|Angle |D3D11 |
+|--------------|-----------|------|------|
+|MapBufferRange|Compute    |310.48|418   |
+|BufferSubData |Compute    |137.52|421.80|
+|MapBufferRange|Render     |343.24|469.65|
+|BufferSubData |Render     |142.70|464.89|
 

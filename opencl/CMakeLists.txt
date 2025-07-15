@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 project(opencltest)
@@ -36,4 +36,4 @@ target_link_libraries(colorconv PRIVATE LibCL)
 
 add_executable(colorconv_gles)
 target_sources(colorconv_gles PRIVATE colorconv_gles.cpp)
-target_link_libraries(colorconv_gles PRIVATE LibGLES)
+target_link_libraries(colorconv_gles PRIVATE LibGLES d3d11 d3dcompiler dxgi)
