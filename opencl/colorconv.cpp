@@ -16,7 +16,9 @@
 namespace {
     bool available_ = false;
     cl::Context ctx_;
-    cl::CommandQueue queue_;
+    cl::CommandQueue hostToDeviceQueue_;
+    cl::CommandQueue computeQueue_;
+    cl::CommandQueue deviceToHostQueue_;
     cl::Program program_;
     size_t gmemAlign_ = 4;
     bool reuseBuffer_ = true;
@@ -63,11 +65,11 @@ namespace {
             MemBlock(size_t size) {
                 size_ = size;
                 buffer_ = cl::Buffer( ctx_, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, size_);
-                hostPtr_ = (T*) queue_.enqueueMapBuffer(buffer_, true, CL_MAP_WRITE, 0, size_);
+                hostPtr_ = (T*) hostToDeviceQueue_.enqueueMapBuffer(buffer_, true, CL_MAP_WRITE, 0, size_);
             }
 
             ~MemBlock() {
-                queue_.enqueueUnmapMemObject(buffer_, hostPtr_);
+                hostToDeviceQueue_.enqueueUnmapMemObject(buffer_, hostPtr_);
             }
 
             operator T*() const {
@@ -167,7 +169,9 @@ public:
         auto selected = platdevlist[selected_index];
 
         ctx_ = cl::Context(cl::vector<cl::Device>{ std::get<1>(selected) });
-        queue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
+        hostToDeviceQueue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
+        computeQueue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
+        deviceToHostQueue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
         gmemAlign_ = std::get<1>(selected).getInfo<CL_DEVICE_MEM_BASE_ADDR_ALIGN>();
         auto svm_caps = std::get<1>(selected).getInfo<CL_DEVICE_SVM_CAPABILITIES>();
         supportSvm_ = !!svm_caps;
@@ -351,17 +355,99 @@ public:
     bool execute(const void* src, void* dstY, void* dstU, void* dstV) {
         if (!available_) return false;
         
+        cl::Event event;
+        
+        // 顺序调用三个分离的方法
+        if (!executeInput(src, event)) return false;
+        if (!executeCompute(event)) return false;
+        if (!executeOutput(dstY, dstU, dstV, event)) return false;
+        
+        // 等待输出完成
+        event.wait();
+        
+        return true;
+    }
+    
+    bool executeInput(const void* src, cl::Event& event) {
+        if (!available_) return false;
+        
         if (bufferMode_ & BM_SVM) {
-            return executeSVM(src, dstY, dstU, dstV);
+            return executeInputSVM(src, event);
         } else if (bufferMode_ & BM_USE_HOST) {
-            return executeUseHost(src, dstY, dstU, dstV);
+            return executeInputUseHost(src, event);
         } else {
-            return executeBuffer(src, dstY, dstU, dstV);
+            return executeInputBuffer(src, event);
+        }
+    }
+    
+    bool executeCompute(cl::Event& ioEvent) {
+        if (!available_) return false;
+        
+        if (bufferMode_ & BM_SVM) {
+            return executeComputeSVM(ioEvent, ioEvent);
+        } else if (bufferMode_ & BM_USE_HOST) {
+            // USE_HOST模式下没有输出buffer是不能执行计算的
+            // return executeComputeUseHost(ioEvent, ioEvent);
+            ioEvent = cl::Event();
+            return true;
+        } else {
+            return executeComputeBuffer(ioEvent, ioEvent);
+        }
+    }
+    
+    bool executeOutput(void* dstY, void* dstU, void* dstV, cl::Event& ioEvent) {
+        if (!available_) return false;
+        
+        if (bufferMode_ & BM_SVM) {
+            return executeOutputSVM(dstY, dstU, dstV, ioEvent, ioEvent);
+        } else if (bufferMode_ & BM_USE_HOST) {
+            return executeOutputUseHost(dstY, dstU, dstV, ioEvent, ioEvent);
+        } else {
+            return executeOutputBuffer(dstY, dstU, dstV, ioEvent, ioEvent);
         }
     }
     
 private:
-    bool executeSVM(const void* src, void* dstY, void* dstU, void* dstV) {
+    // USE_HOST缓冲区存储（需要在execute过程中持续存在）
+    std::unique_ptr<cl::Buffer> tempSrcBuf_, tempYBuf_, tempUBuf_, tempVBuf_;
+    
+    bool executeInputSVM(const void* src, cl::Event& event) {
+        if (bufferMode_ & BM_COPY) {
+            auto ret = clEnqueueSVMMemcpy(hostToDeviceQueue_(), false, srcSvmPtr_, src, srcSize_, 0, nullptr, &event());
+            if (ret != CL_SUCCESS) return false;
+        } else if (bufferMode_ & BM_MAP) {
+            cl_int ret = clEnqueueSVMMap(hostToDeviceQueue_(), true, CL_MAP_WRITE_INVALIDATE_REGION, srcSvmPtr_, srcSize_, 0, nullptr, &event());
+            if (ret != CL_SUCCESS) return false;
+            (*mymemcpy)(srcSvmPtr_, src, srcSize_);
+            ret = clEnqueueSVMUnmap(hostToDeviceQueue_(), srcSvmPtr_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+        }
+        
+        return true;
+    }
+    
+    bool executeInputUseHost(const void* src, cl::Event& event) {
+        // 创建USE_HOST缓冲区
+        tempSrcBuf_ = std::make_unique<cl::Buffer>(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, srcSize_, (void*)src);
+        
+        // USE_HOST模式下输入不需要显式传输，直接标记event为完成
+        event = cl::Event();
+        return true;
+    }
+    
+    bool executeInputBuffer(const void* src, cl::Event& event) {
+        if (bufferMode_ & BM_COPY) {
+            hostToDeviceQueue_.enqueueWriteBuffer(*srcBuffer_, false, 0, srcSize_, src, nullptr, &event);
+        } else if (bufferMode_ & BM_MAP) {
+            auto mapped = (void*)hostToDeviceQueue_.enqueueMapBuffer(*srcBuffer_, true, CL_MAP_WRITE_INVALIDATE_REGION, 0, srcSize_);
+            (*mymemcpy)(mapped, src, srcSize_);
+            hostToDeviceQueue_.enqueueUnmapMemObject(*srcBuffer_, mapped, nullptr, &event);
+        }
+        
+        return true;
+    }
+    
+    bool executeComputeSVM(const cl::Event& waitEvent, cl::Event& event) {
         auto func = cl::KernelFunctor<
             void*, cl_uint,
             void*, cl_uint, void*, cl_uint, void*, cl_uint,
@@ -369,59 +455,28 @@ private:
             cl_uchar2, cl_uchar2>
             (program_, "bgra_to_i420_frame");
         
-        // 复制输入数据到SVM
-        if (bufferMode_ & BM_COPY) {
-            auto ret = clEnqueueSVMMemcpy(queue_(), false, srcSvmPtr_, src, srcSize_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-        } else if (bufferMode_ & BM_MAP) {
-            cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_WRITE_INVALIDATE_REGION, srcSvmPtr_, srcSize_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-            (*mymemcpy)(srcSvmPtr_, src, srcSize_);
-            ret = clEnqueueSVMUnmap(queue_(), srcSvmPtr_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
+        std::vector<cl::Event> waitEvents;
+        if (waitEvent() != nullptr) {
+            waitEvents.push_back(waitEvent);
         }
         
-        // 执行kernel
-        func(cl::EnqueueArgs(queue_, cl::NDRange(width_ / 2, height_ / 2)),
-            srcSvmPtr_, (cl_uint)srcStride_, 
-            ySvmPtr_, (cl_uint)yStride_, 
-            uSvmPtr_, (cl_uint)uStride_, 
-            vSvmPtr_, (cl_uint)vStride_,
-            yfactor_, ufactor_, vfactor_,
-            yrange_, uvrange_);
+        func(cl::EnqueueArgs(computeQueue_, waitEvents, cl::NDRange(width_ / 2, height_ / 2)),
+        srcSvmPtr_, (cl_uint)srcStride_, 
+        ySvmPtr_, (cl_uint)yStride_, 
+        uSvmPtr_, (cl_uint)uStride_, 
+        vSvmPtr_, (cl_uint)vStride_,
+        yfactor_, ufactor_, vfactor_,
+        yrange_, uvrange_);
         
-        // 复制输出数据
-        if (bufferMode_ & BM_COPY) {
-            auto ret = clEnqueueSVMMemcpy(queue_(), true, dstY, ySvmPtr_, ySize_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-            ret = clEnqueueSVMMemcpy(queue_(), true, dstU, uSvmPtr_, uSize_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-            ret = clEnqueueSVMMemcpy(queue_(), true, dstV, vSvmPtr_, vSize_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-        } else if (bufferMode_ & BM_MAP) {
-            cl_int ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, ySvmPtr_, ySize_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-            (*mymemcpy)(dstY, ySvmPtr_, ySize_);
-            ret = clEnqueueSVMUnmap(queue_(), ySvmPtr_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-            
-            ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, uSvmPtr_, uSize_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-            (*mymemcpy)(dstU, uSvmPtr_, uSize_);
-            ret = clEnqueueSVMUnmap(queue_(), uSvmPtr_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-            
-            ret = clEnqueueSVMMap(queue_(), true, CL_MAP_READ, vSvmPtr_, vSize_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-            (*mymemcpy)(dstV, vSvmPtr_, vSize_);
-            ret = clEnqueueSVMUnmap(queue_(), vSvmPtr_, 0, nullptr, nullptr);
-            if (ret != CL_SUCCESS) return false;
-        }
+        // 获取kernel执行的event
+        cl::Event outEvent;
+        computeQueue_.enqueueMarkerWithWaitList(&waitEvents, &outEvent);
+        event = std::move(outEvent);
         
         return true;
     }
     
-    bool executeUseHost(const void* src, void* dstY, void* dstU, void* dstV) {
+    bool executeComputeUseHost(const cl::Event& waitEvent, cl::Event& event) {
         auto func = cl::KernelFunctor<
             cl::Buffer, cl_uint,
             cl::Buffer, cl_uint, cl::Buffer, cl_uint, cl::Buffer, cl_uint,
@@ -429,28 +484,28 @@ private:
             cl_uchar2, cl_uchar2>
             (program_, "bgra_to_i420_frame");
         
-        // 创建USE_HOST缓冲区
-        cl::Buffer srcBuf{ ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, srcSize_, (void*)src };
-        cl::Buffer yBuf{ ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, ySize_, dstY };
-        cl::Buffer uBuf{ ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, uSize_, dstU };
-        cl::Buffer vBuf{ ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, vSize_, dstV };
+        std::vector<cl::Event> waitEvents;
+        if (waitEvent() != nullptr) {
+            waitEvents.push_back(waitEvent);
+        }
         
-        func(cl::EnqueueArgs(queue_, cl::NDRange(width_ / 2, height_ / 2)),
-            srcBuf, (cl_uint)srcStride_, 
-            yBuf, (cl_uint)yStride_, 
-            uBuf, (cl_uint)uStride_, 
-            vBuf, (cl_uint)vStride_,
+        func(cl::EnqueueArgs(computeQueue_, waitEvents, cl::NDRange(width_ / 2, height_ / 2)),
+            *tempSrcBuf_, (cl_uint)srcStride_, 
+            *tempYBuf_, (cl_uint)yStride_, 
+            *tempUBuf_, (cl_uint)uStride_, 
+            *tempVBuf_, (cl_uint)vStride_,
             yfactor_, ufactor_, vfactor_,
             yrange_, uvrange_);
         
-        // 确保kernel执行完成
-        void* hostptr = queue_.enqueueMapBuffer(yBuf, true, CL_MAP_READ, 0, ySize_);
-        queue_.enqueueUnmapMemObject(yBuf, hostptr);
+        // 获取kernel执行的event
+        cl::Event outEvent;
+        computeQueue_.enqueueMarkerWithWaitList(&waitEvents, &outEvent);
+        event = std::move(outEvent);
         
         return true;
     }
     
-    bool executeBuffer(const void* src, void* dstY, void* dstU, void* dstV) {
+    bool executeComputeBuffer(const cl::Event& waitEvent, cl::Event& event) {
         auto func = cl::KernelFunctor<
             cl::Buffer, cl_uint,
             cl::Buffer, cl_uint, cl::Buffer, cl_uint, cl::Buffer, cl_uint,
@@ -458,17 +513,12 @@ private:
             cl_uchar2, cl_uchar2>
             (program_, "bgra_to_i420_frame");
         
-        // 输入数据传输
-        if (bufferMode_ & BM_COPY) {
-            queue_.enqueueWriteBuffer(*srcBuffer_, false, 0, srcSize_, src);
-        } else if (bufferMode_ & BM_MAP) {
-            auto mapped = (void*)queue_.enqueueMapBuffer(*srcBuffer_, true, CL_MAP_WRITE_INVALIDATE_REGION, 0, srcSize_);
-            (*mymemcpy)(mapped, src, srcSize_);
-            queue_.enqueueUnmapMemObject(*srcBuffer_, mapped);
+        std::vector<cl::Event> waitEvents;
+        if (waitEvent() != nullptr) {
+            waitEvents.push_back(waitEvent);
         }
         
-        // 执行kernel
-        func(cl::EnqueueArgs(queue_, cl::NDRange(width_ / 2, height_ / 2)),
+        func(cl::EnqueueArgs(computeQueue_, waitEvents, cl::NDRange(width_ / 2, height_ / 2)),
             *srcBuffer_, (cl_uint)srcStride_, 
             *yBuffer_, (cl_uint)yStride_, 
             *uBuffer_, (cl_uint)uStride_, 
@@ -476,23 +526,104 @@ private:
             yfactor_, ufactor_, vfactor_,
             yrange_, uvrange_);
         
-        // 输出数据传输
+        // 获取kernel执行的event
+        computeQueue_.enqueueMarkerWithWaitList(&waitEvents, &event);
+        
+        return true;
+    }
+    
+    bool executeOutputSVM(void* dstY, void* dstU, void* dstV, const cl::Event& waitEvent, cl::Event& event) {
+        std::vector<cl::Event> waitEvents;
+        if (waitEvent() != nullptr) {
+            waitEvents.push_back(waitEvent);
+        }
+        
         if (bufferMode_ & BM_COPY) {
-            queue_.enqueueReadBuffer(*yBuffer_, true, 0, ySize_, dstY);
-            queue_.enqueueReadBuffer(*uBuffer_, true, 0, uSize_, dstU);
-            queue_.enqueueReadBuffer(*vBuffer_, true, 0, vSize_, dstV);
+            std::vector<cl_event> waitList;
+            for (auto& e : waitEvents) {
+                waitList.push_back(e());
+            }
+            auto ret = clEnqueueSVMMemcpy(deviceToHostQueue_(), false, dstY, ySvmPtr_, ySize_, waitList.size(), waitList.data(), nullptr);
+            if (ret != CL_SUCCESS) return false;
+            ret = clEnqueueSVMMemcpy(deviceToHostQueue_(), false, dstU, uSvmPtr_, uSize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            cl_event ev;
+            ret = clEnqueueSVMMemcpy(deviceToHostQueue_(), false, dstV, vSvmPtr_, vSize_, 0, nullptr, &ev);
+            event = cl::Event(ev);
+            if (ret != CL_SUCCESS) return false;
         } else if (bufferMode_ & BM_MAP) {
-            auto yMapped = (void*)queue_.enqueueMapBuffer(*yBuffer_, true, CL_MAP_READ, 0, ySize_);
+            std::vector<cl_event> waitList;
+            for (auto& e : waitEvents) {
+                waitList.push_back(e());
+            }
+            cl_int ret = clEnqueueSVMMap(deviceToHostQueue_(), true, CL_MAP_READ, ySvmPtr_, ySize_, waitList.size(), waitList.data(), nullptr);
+            if (ret != CL_SUCCESS) return false;
+            (*mymemcpy)(dstY, ySvmPtr_, ySize_);
+            ret = clEnqueueSVMUnmap(deviceToHostQueue_(), ySvmPtr_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            
+            ret = clEnqueueSVMMap(deviceToHostQueue_(), true, CL_MAP_READ, uSvmPtr_, uSize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            (*mymemcpy)(dstU, uSvmPtr_, uSize_);
+            ret = clEnqueueSVMUnmap(deviceToHostQueue_(), uSvmPtr_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            
+            ret = clEnqueueSVMMap(deviceToHostQueue_(), true, CL_MAP_READ, vSvmPtr_, vSize_, 0, nullptr, nullptr);
+            if (ret != CL_SUCCESS) return false;
+            (*mymemcpy)(dstV, vSvmPtr_, vSize_);
+            cl_event ev;
+            ret = clEnqueueSVMUnmap(deviceToHostQueue_(), vSvmPtr_, 0, nullptr, &ev);
+            event = cl::Event(ev);
+            if (ret != CL_SUCCESS) return false;
+        }
+        
+        return true;
+    }
+    
+    bool executeOutputUseHost(void* dstY, void* dstU, void* dstV, const cl::Event& waitEvent, cl::Event& event) {
+        // 创建输出缓冲区
+        tempYBuf_ = std::make_unique<cl::Buffer>(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, ySize_, dstY);
+        tempUBuf_ = std::make_unique<cl::Buffer>(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, uSize_, dstU);
+        tempVBuf_ = std::make_unique<cl::Buffer>(ctx_, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, vSize_, dstV);
+        
+        if (!executeComputeUseHost(waitEvent, event))
+            return false;
+
+        // USE_HOST模式下输出不需要显式传输，但需要确保kernel执行完成
+        std::vector<cl::Event> waitEvents;
+        if (event() != nullptr) {
+            waitEvents.push_back(event);
+        }
+        
+        cl::Event outEvent;
+        void* hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempYBuf_, false, CL_MAP_READ, 0, ySize_, &waitEvents, &outEvent);
+        deviceToHostQueue_.enqueueUnmapMemObject(*tempYBuf_, hostptr);
+        event = std::move(outEvent);
+        return true;
+    }
+    
+    bool executeOutputBuffer(void* dstY, void* dstU, void* dstV, const cl::Event& waitEvent, cl::Event& event) {
+        std::vector<cl::Event> waitEvents;
+        if (waitEvent() != nullptr) {
+            waitEvents.push_back(waitEvent);
+        }
+        
+        if (bufferMode_ & BM_COPY) {
+            deviceToHostQueue_.enqueueReadBuffer(*yBuffer_, false, 0, ySize_, dstY, &waitEvents);
+            deviceToHostQueue_.enqueueReadBuffer(*uBuffer_, false, 0, uSize_, dstU);
+            deviceToHostQueue_.enqueueReadBuffer(*vBuffer_, false, 0, vSize_, dstV, nullptr, &event);
+        } else if (bufferMode_ & BM_MAP) {
+            auto yMapped = (void*)deviceToHostQueue_.enqueueMapBuffer(*yBuffer_, true, CL_MAP_READ, 0, ySize_, &waitEvents);
             (*mymemcpy)(dstY, yMapped, ySize_);
-            queue_.enqueueUnmapMemObject(*yBuffer_, yMapped);
+            deviceToHostQueue_.enqueueUnmapMemObject(*yBuffer_, yMapped);
             
-            auto uMapped = (void*)queue_.enqueueMapBuffer(*uBuffer_, true, CL_MAP_READ, 0, uSize_);
+            auto uMapped = (void*)deviceToHostQueue_.enqueueMapBuffer(*uBuffer_, true, CL_MAP_READ, 0, uSize_);
             (*mymemcpy)(dstU, uMapped, uSize_);
-            queue_.enqueueUnmapMemObject(*uBuffer_, uMapped);
+            deviceToHostQueue_.enqueueUnmapMemObject(*uBuffer_, uMapped);
             
-            auto vMapped = (void*)queue_.enqueueMapBuffer(*vBuffer_, true, CL_MAP_READ, 0, vSize_);
+            auto vMapped = (void*)deviceToHostQueue_.enqueueMapBuffer(*vBuffer_, true, CL_MAP_READ, 0, vSize_);
             (*mymemcpy)(dstV, vMapped, vSize_);
-            queue_.enqueueUnmapMemObject(*vBuffer_, vMapped);
+            deviceToHostQueue_.enqueueUnmapMemObject(*vBuffer_, vMapped, nullptr, &event);
         }
         
         return true;
@@ -515,7 +646,13 @@ void test() {
     memset(v, 0, width * height / 4);
 
     // 创建转换器对象
-    BGRAToI420Converter converter(width, height, width * 4, width, width / 2, width / 2);
+    BGRAToI420Converter converter[3] = {
+        {width, height, width * 4, width, width / 2, width / 2},
+        {width, height, width * 4, width, width / 2, width / 2},
+        {width, height, width * 4, width, width / 2, width / 2}
+    };
+
+    std::optional<cl::Event> convertEvent[3];
 
     auto begin = std::chrono::steady_clock::now();
     auto iter_begin = begin;
@@ -523,7 +660,9 @@ void test() {
     size_t iter_frames = 0;
     double fps = 60.0;
 
-    for(;;) {
+    for(int ind = 0;; ++ind) {
+        int x[] = { (ind + 2) % 3, (ind + 1) % 3, ind % 3 };
+        // int x[] = { 0, 0, 0 };
         auto diff = std::chrono::steady_clock::now() - begin;
         auto iter_diff = std::chrono::steady_clock::now() - iter_begin;
         if (iter_diff > std::chrono::seconds(1)) {
@@ -541,10 +680,22 @@ void test() {
         // std::this_thread::sleep_until(targetTime);
         
         // 使用转换器对象执行转换
-        converter.execute(src, y, u, v);
-        
-        iter_frames += 1;
-        frames += 1;
+        if (convertEvent[x[0]]) {
+            convertEvent[x[0]]->wait();
+            iter_frames += 1;
+            frames += 1;
+        } else {
+            convertEvent[x[0]] = cl::Event();
+        }
+        converter[x[0]].executeInput(src, *convertEvent[x[0]]);
+
+        if (convertEvent[x[1]]) {
+            converter[x[1]].executeCompute(*convertEvent[x[1]]);
+        }
+
+        if (convertEvent[x[2]]) {
+            converter[x[2]].executeOutput(y, u, v, *convertEvent[x[2]]);
+        }
 
         if (frames == 1) {
             for(int i = 0; i < width * height; ++i) if (y[i] != -21) { fprintf(stderr, "check failed.\n"); break; }
