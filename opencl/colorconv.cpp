@@ -574,10 +574,10 @@ void test() {
     const int width = 1920;
     const int height = 1920;
 
-    auto src = typename MemT::MemBlock<char>(width * height * 4);
-    auto y = typename MemT::MemBlock<char>(width * height);
-    auto u = typename MemT::MemBlock<char>(width * height / 4);
-    auto v = typename MemT::MemBlock<char>(width * height / 4);
+    typename MemT::template MemBlock<char> src(width * height * 4);
+    typename MemT::template MemBlock<char> y(width * height);
+    typename MemT::template MemBlock<char> u(width * height / 4);
+    typename MemT::template MemBlock<char> v(width * height / 4);
     memset(src, 255, width * height * 4);
     memset(y, 0, width * height);
     memset(u, 0, width * height / 4);

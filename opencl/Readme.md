@@ -165,12 +165,15 @@ Reuse Shader Storage Buffer Object
 
 run 15 seconds, performance mode, max fan speed
 
-|InputBuffer   |Shader Type|Angle |D3D11 |
-|--------------|-----------|------|------|
-|MapBufferRange|Compute    |115.89|173.94|
-|BufferSubData |Compute    |78.93 |29.12 |
-|MapBufferRange|Render     |151.81|226.44|
-|BufferSubData |Render     |95.27 |31.76 |
+Optimized: try zero copy
+Not optimized: always use fallback
+
+|InputBuffer   |Shader Type|Angle |D3D11 |D3D11 Optimized|
+|--------------|-----------|------|------|---------------|
+|MapBufferRange|Compute    |115.89|173.94|276.55         |
+|BufferSubData |Compute    |78.93 |29.12 |31.73          |
+|MapBufferRange|Render     |151.81|226.44|489.58         |
+|BufferSubData |Render     |95.27 |31.76 |33.49          |
 
 
 ## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 4090 laptop
@@ -179,10 +182,10 @@ Reuse Shader Storage Buffer Object
 
 run 15 seconds, performance mode, max fan speed
 
-|InputBuffer   |Shader Type|Angle |D3D11 |
-|--------------|-----------|------|------|
-|MapBufferRange|Compute    |310.48|418   |
-|BufferSubData |Compute    |137.52|421.80|
-|MapBufferRange|Render     |343.24|469.65|
-|BufferSubData |Render     |142.70|464.89|
+|InputBuffer   |Shader Type|Angle |D3D11 |D3D11 Optimized|
+|--------------|-----------|------|------|---------------|
+|MapBufferRange|Compute    |310.48|418   |1112.59        |
+|BufferSubData |Compute    |137.52|421.80|423.38         |
+|MapBufferRange|Render     |343.24|469.65|1418.1         |
+|BufferSubData |Render     |142.70|464.89|469.05         |
 
