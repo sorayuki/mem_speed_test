@@ -328,6 +328,11 @@ private:
             
             srcSvmPtr_ = ySvmPtr_ = uSvmPtr_ = vSvmPtr_ = nullptr;
         }
+
+        srcBuffer_.reset();
+        yBuffer_.reset();
+        uBuffer_.reset();
+        vBuffer_.reset();
     }
     
 public:
@@ -370,6 +375,11 @@ public:
     
     bool executeInput(const void* src, cl::Event& event) {
         if (!available_) return false;
+
+        if (!reuseBuffer_) {
+            cleanup();
+            initBuffers();
+        }
         
         if (bufferMode_ & BM_SVM) {
             return executeInputSVM(src, event);

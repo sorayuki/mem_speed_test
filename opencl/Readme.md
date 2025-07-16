@@ -44,6 +44,8 @@ public:
 # Test Result
 ## Intel UHD Graphics (i9-13900HX)
 
+(Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
+
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
 |HostMem|clBuf    |Method|ReuseClBuf|ReuseClBuf |NoReuse    |NoReuse    |
@@ -67,6 +69,8 @@ Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 |Regular|HostAlloc|Map   |483       |           |374        |           |
 
 ## Nvidia RTX 4090 laptop
+
+(Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
 
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
@@ -94,6 +98,8 @@ Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
 ## AMD Vega64 Desktop
 
+(Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
+
 not my computer
 
 |HostMem|clBuf    |Method|ReuseClBuf|NoReuse    |
@@ -116,6 +122,8 @@ not my computer
 
 ## OpenCL on D3D12: Intel UHD Graphics (i9-13900HX)
 
+(Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
+
 Memory: DDR5 Single-Rank 16GB*2 5600MHz
 
 |HostMem|clBuf    |Method|ReuseClBuf|ReuseClBuf |NoReuse    |NoReuse    |
@@ -137,6 +145,8 @@ Memory: DDR5 Single-Rank 16GB*2 5600MHz
 |Pinned |HostAlloc|R/WBuf|10.9      |           |10.7       |           |
 
 ## OpenCL on D3D12: Nvidia RTX 4090 laptop
+
+(Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
 
 Memory: DDR5 Single-Rank 16GB*2 5600MHz
 
