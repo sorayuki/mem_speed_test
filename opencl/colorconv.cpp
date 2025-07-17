@@ -298,13 +298,13 @@ namespace {
                         (*mymemcpy)(hostPtr_, mapped, size_);
                         queue_.enqueueUnmapMemObject(buffer_, mapped);
                     }
-
-                    pool_.release(buffer_, flags_, size_);
                 }
             }
 
             if (localBufferMode_ & BM_SVM) {
                 pool_.release(svmPtr_, size_);
+            } else {
+                pool_.release(buffer_, flags_, size_);
             }
 
             UnlockHostPtr();
