@@ -35,5 +35,9 @@ target_sources(colorconv PRIVATE colorconv.cpp)
 target_link_libraries(colorconv PRIVATE LibCL)
 
 add_executable(colorconv_gles)
-target_sources(colorconv_gles PRIVATE colorconv_gles.cpp)
-target_link_libraries(colorconv_gles PRIVATE LibGLES d3d11 d3dcompiler dxgi)
+target_sources(colorconv_gles PRIVATE colorconv_runtest.h colorconv_gles.cpp)
+target_link_libraries(colorconv_gles PRIVATE LibGLES)
+
+add_executable(colorconv_dx)
+target_sources(colorconv_dx PRIVATE colorconv_runtest.h colorconv_dx.cpp)
+target_link_libraries(colorconv_dx PRIVATE d3d11 d3dcompiler dxgi)
