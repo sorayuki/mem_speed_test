@@ -605,9 +605,13 @@ private:
             waitEvents.push_back(event);
         }
         
-        cl::Event outEvent;
-        void* hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempYBuf_, false, CL_MAP_READ, 0, ySize_, &waitEvents, &outEvent);
+        void* hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempYBuf_, true, CL_MAP_READ, 0, ySize_, &waitEvents, nullptr);
         deviceToHostQueue_.enqueueUnmapMemObject(*tempYBuf_, hostptr);
+        hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempUBuf_, true, CL_MAP_READ, 0, uSize_, &waitEvents, nullptr);
+        deviceToHostQueue_.enqueueUnmapMemObject(*tempUBuf_, hostptr);
+        cl::Event outEvent;
+        hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempVBuf_, true, CL_MAP_READ, 0, vSize_, &waitEvents, &outEvent);
+        deviceToHostQueue_.enqueueUnmapMemObject(*tempVBuf_, hostptr);
         event = std::move(outEvent);
         return true;
     }
@@ -671,8 +675,9 @@ void test() {
     double fps = 60.0;
 
     for(int ind = 0;; ++ind) {
-        int x[] = { (ind + 2) % 3, (ind + 1) % 3, ind % 3 };
-        // int x[] = { 0, 0, 0 };
+        // pipeline mode or sync mode
+        // int x[] = { (ind + 2) % 3, (ind + 1) % 3, ind % 3 };
+        int x[] = { 0, 0, 0 };
         auto diff = std::chrono::steady_clock::now() - begin;
         auto iter_diff = std::chrono::steady_clock::now() - iter_begin;
         if (iter_diff > std::chrono::seconds(1)) {

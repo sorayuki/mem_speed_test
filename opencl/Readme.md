@@ -44,57 +44,56 @@ public:
 # Test Result For OpenCL
 ## Intel UHD Graphics (i9-13900HX)
 
-(Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
-
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
-|HostMem|clBuf    |Method|ReuseClBuf|ReuseClBuf |NoReuse    |NoReuse    |
-|-------|---------|------|----------|-----------|-----------|-----------|
-|       |         |      |Quite     |Performance|Quite      |Performance|
-|Regular|Regular  |R/WBuf|303.7     |462        |252        |400.8      |
-|Regular|Regular  |MapCpy|290       |432        |248        |378.5      |
-|Regular|SVM      |SvmCpy|313.8     |443        |195        |307.6      |
-|Regular|SVM      |MapCpy|475       |620        |250        |383.8      |
-|Regular|HostAlloc|R/WBuf|303       |460        |253        |397.4      |
-|Regular|HostAlloc|MapCpy|290       |431        |245        |372.5      |
-|Regular|UseHost  |/     |/         |/          |230        |355        |
-|Aligned|Regular  |R/WBuf|313       |468        |256        |392        |
-|Aligned|UseHost  |/     |/         |/          |584        |917        |
-|Aligned|SVM      |SvmCpy|332       |477        |206        |321        |
-|Pinned |Regular  |R/WBuf|304.3     |465        |256        |386        |
-|Pinned |HostAlloc|R/WBuf|298       |462        |256        |383.5      |
-|Pinned |SVM      |SvmCpy|323       |463.7      |200        |296        |
-|Regular|Regular  |Map   |482       |           |372        |           |
-|Regular|SVM      |Map   |1747      |           |377        |           |
-|Regular|HostAlloc|Map   |483       |           |374        |           |
+Run in performance mode.
+Sync mode (not pipelined)
+
+|HostMem|clBuf    |Method|ReuseClBuf |NoReuse    |
+|-------|---------|------|-----------|-----------|
+|Regular|Regular  |R/WBuf|696.124    |406.763    |
+|Regular|Regular  |MapCpy|675.564    |401.541    |
+|Regular|SVM      |SvmCpy|700.021    |405.251    |
+|Regular|SVM      |MapCpy|765.042    |396.376    |
+|Regular|HostAlloc|R/WBuf|714.867    |409.717    |
+|Regular|HostAlloc|MapCpy|713.011    |382.909    |
+|Regular|UseHost  |/     |/          |345.01     |
+|Aligned|Regular  |R/WBuf|732.834    |448.527    |
+|Aligned|UseHost  |/     |/          |941.101    |
+|Aligned|SVM      |SvmCpy|787.509    |436.746    |
+|Pinned |Regular  |R/WBuf|781.758    |433.105    |
+|Pinned |HostAlloc|R/WBuf|792.734    |431.588    |
+|Pinned |SVM      |SvmCpy|792.734    |440.679    |
+|Regular|Regular  |Map   |2004.07    |580.949    |
+|Regular|SVM      |Map   |2052.12    |590.909    |
+|Regular|HostAlloc|Map   |2063.19    |589.251    |
 
 ## Nvidia RTX 4090 laptop
 
-(Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
-
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
-|HostMem|clBuf    |Method|ReuseClBuf|ReuseClBuf |NoReuse    |NoReuse    |
-|-------|---------|------|----------|-----------|-----------|-----------|
-|       |         |      |Quite     |Performance|Quite      |Performance|
-|Regular|Regular  |R/WBuf|286.3     |445.6      |220        |349        |
-|Regular|Regular  |MapCpy|80*       |130.8*     |54*        |96.4       |
-|Regular|SVM      |SvmCpy|441.5     |659        |54*        |93.5*      |
-|Regular|SVM      |MapCpy|313.8     |433.6      |58*        |100*       |
-|Regular|HostAlloc|R/WBuf|300*      |428.9      |225        |346.4      |
-|Regular|HostAlloc|MapCpy|79*       |131*       |54*        |94.5*      |
-|Regular|UseHost  |/     |/         |/          |150        |250        |
-|Aligned|Regular  |R/WBuf|290*      |426.5      |220        |345.9      |
-|Aligned|UseHost  |/     |/         |/          |152        |241.7      |
-|Aligned|SVM      |SvmCpy|465*      |654.6      |54*        |95*        |
-|Pinned |Regular  |R/WBuf|371*      |479        |320        |446.3      |
-|Pinned |HostAlloc|R/WBuf|366       |499.4      |321        |440        |
-|Pinned |SVM      |SvmCpy|722       |802.7      |65*        |121*       |
-|Regular|Regular  |Map   |          |131*       |           |97.4*      |
-|Regular|SVM      |Map   |          |743        |           |114*       |
-|Regular|HostAlloc|Map   |          |135*       |           |97*        |
+Run in performance mode.
+Sync mode (not pipelined)
 
-* The laptop will hit power limit when doing memcpy. The result selected before it slows down.
+|HostMem|clBuf    |Method|ReuseClBuf |NoReuse    |
+|-------|---------|------|-----------|-----------|
+|Regular|Regular  |R/WBuf|664.03     |380.05     |
+|Regular|Regular  |MapCpy|501.50     |151.15     |
+|Regular|SVM      |SvmCpy|667.31     |126.91     |
+|Regular|SVM      |MapCpy|529.61     |119.39     |
+|Regular|HostAlloc|R/WBuf|669.14     |406.08     |
+|Regular|HostAlloc|MapCpy|508.60     |157.93     |
+|Regular|UseHost  |/     |/          |279.604    |
+|Aligned|Regular  |R/WBuf|669.95     |388.79     |
+|Aligned|UseHost  |/     |/          |291.224    |
+|Aligned|SVM      |SvmCpy|700.66     |132.62     |
+|Pinned |Regular  |R/WBuf|1082.74    |577.17     |
+|Pinned |HostAlloc|R/WBuf|1080.81    |581.04     |
+|Pinned |SVM      |SvmCpy|1075.46    |151.26     |
+|Regular|Regular  |Map   |960.02     |160.34     |
+|Regular|SVM      |Map   |1058.47    |141.33     |
+|Regular|HostAlloc|Map   |956.24     |163.18     |
+
 
 ## Nvidia RTX 2060 desktop
 
@@ -110,9 +109,9 @@ Memory: DDR4 8G*4 2400MHz
 |Regular|SVM      |MapCpy|232.78     |82.97      |
 |Regular|HostAlloc|R/WBuf|256.43     |200.29     |
 |Regular|HostAlloc|MapCpy|225.84     |84.34      |
-|Regular|UseHost  |/     |           |194(err)   |
+|Regular|UseHost  |/     |           |           |
 |Aligned|Regular  |R/WBuf|270.58     |199.5      |
-|Aligned|UseHost  |/     |           |195.8(err) |
+|Aligned|UseHost  |/     |           |           |
 |Aligned|SVM      |SvmCpy|265.43     |84.86      |
 |Pinned |Regular  |R/WBuf|497.86     |297.63     |
 |Pinned |HostAlloc|R/WBuf|499.14     |304.42     |
@@ -121,7 +120,6 @@ Memory: DDR4 8G*4 2400MHz
 |Regular|SVM      |Map   |464.76     |104.27     |
 |Regular|HostAlloc|Map   |437.69     |108.04     |
 
-* error means couldn't pass output data check
 
 ## AMD Vega64 Desktop
 
