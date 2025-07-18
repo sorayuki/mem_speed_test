@@ -41,7 +41,7 @@ public:
 };
 ```
 
-# Test Result
+# Test Result For OpenCL
 ## Intel UHD Graphics (i9-13900HX)
 
 (Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
@@ -95,6 +95,33 @@ Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 |Regular|HostAlloc|Map   |          |135*       |           |97*        |
 
 * The laptop will hit power limit when doing memcpy. The result selected before it slows down.
+
+## Nvidia RTX 2060 desktop
+
+(collected at cde46e404a2cb8e11d2508e155e816469a12d538)
+
+Memory: DDR4 8G*4 2400MHz
+
+|HostMem|clBuf    |Method|ReuseClBuf |NoReuse    |
+|-------|---------|------|-----------|-----------|
+|Regular|Regular  |R/WBuf|251.48     |185.75     |
+|Regular|Regular  |MapCpy|214.73     |82.16      |
+|Regular|SVM      |SvmCpy|263.27     |82.8       |
+|Regular|SVM      |MapCpy|232.78     |82.97      |
+|Regular|HostAlloc|R/WBuf|256.43     |200.29     |
+|Regular|HostAlloc|MapCpy|225.84     |84.34      |
+|Regular|UseHost  |/     |           |194(err)   |
+|Aligned|Regular  |R/WBuf|270.58     |199.5      |
+|Aligned|UseHost  |/     |           |195.8(err) |
+|Aligned|SVM      |SvmCpy|265.43     |84.86      |
+|Pinned |Regular  |R/WBuf|497.86     |297.63     |
+|Pinned |HostAlloc|R/WBuf|499.14     |304.42     |
+|Pinned |SVM      |SvmCpy|495.37     |104.51     |
+|Regular|Regular  |Map   |441.54     |107.29     |
+|Regular|SVM      |Map   |464.76     |104.27     |
+|Regular|HostAlloc|Map   |437.69     |108.04     |
+
+* error means couldn't pass output data check
 
 ## AMD Vega64 Desktop
 
@@ -169,7 +196,13 @@ Memory: DDR5 Single-Rank 16GB*2 5600MHz
 |Pinned |HostAlloc|R/WBuf|11.4      |           |11         |           |
 
 
+# Test Result For libANGLE / D3D11
+
+Host to device transfer may incorrect in map mode, because ```nvidia-smi dmon -s puct``` shows little host to device transfer.
+
 ## OpenGL ES via libANGLE / RAW D3D11: Intel UHD Graphics (i9-13900HX)
+
+Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
 Reuse Shader Storage Buffer Object
 
@@ -188,6 +221,8 @@ Not optimized: always use fallback
 
 ## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 4090 laptop
 
+Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
+
 Reuse Shader Storage Buffer Object
 
 run 15 seconds, performance mode, max fan speed
@@ -198,4 +233,18 @@ run 15 seconds, performance mode, max fan speed
 |BufferSubData |Compute    |137.52|421.80|423.38         |
 |MapBufferRange|Render     |343.24|469.65|1418.1         |
 |BufferSubData |Render     |142.70|464.89|469.05         |
+
+
+## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 2060 desktop
+
+Memory: DDR4 8G*4 2400MHz
+
+Reuse Shader Storage Buffer Object
+
+|InputBuffer   |Shader Type|Angle |D3D11 Optimized|
+|--------------|-----------|------|---------------|
+|MapBufferRange|Compute    |70.29 |450.3          |
+|BufferSubData |Compute    |68.02 |202.37         |
+|MapBufferRange|Render     |71.92 |693.2          |
+|BufferSubData |Render     |78.29 |233.25         |
 
