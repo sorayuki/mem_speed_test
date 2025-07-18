@@ -18,7 +18,6 @@ class ColorConvD3D11 {
     
     bool useComputeShader_ = true;
     bool mapInputBuffer_ = true;
-    bool supportsZeroCopy_ = false;
     
     CComPtr<ID3D11ComputeShader> computeShader_;
     CComPtr<ID3D11VertexShader> vertexShader_;
@@ -94,50 +93,7 @@ class ColorConvD3D11 {
             throw std::runtime_error("Failed to create D3D11 device");
         }
         
-        // 检测GPU类型和内存配置
-        TestZeroCopySupport();
-        
         return true;
-    }
-    
-    void TestZeroCopySupport() {
-        // 对于iGPU，测试两种零拷贝场景：
-        // 1. 输入缓冲区：可CPU写入的UAV缓冲区
-        // 2. 输出缓冲区：可CPU读取的UAV缓冲区
-        
-        // 测试场景1：输入零拷贝（CPU写入 + GPU UAV访问）
-        D3D11_BUFFER_DESC inputTestDesc = {};
-        inputTestDesc.Usage = D3D11_USAGE_DYNAMIC;
-        inputTestDesc.ByteWidth = 1024;
-        inputTestDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;  // 使用SRV而非UAV
-        inputTestDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-        inputTestDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-        inputTestDesc.StructureByteStride = 4;
-        
-        CComPtr<ID3D11Buffer> inputTestBuffer;
-        HRESULT hr1 = device_->CreateBuffer(&inputTestDesc, nullptr, &inputTestBuffer);
-        
-        // 测试场景2：输出零拷贝（GPU UAV写入 + CPU读取）
-        // 这种组合在标准D3D11中通常不被支持，但iGPU可能支持
-        D3D11_BUFFER_DESC outputTestDesc = {};
-        outputTestDesc.Usage = D3D11_USAGE_DYNAMIC;
-        outputTestDesc.ByteWidth = 1024;
-        outputTestDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
-        outputTestDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-        outputTestDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-        outputTestDesc.StructureByteStride = 4;
-        
-        CComPtr<ID3D11Buffer> outputTestBuffer;
-        HRESULT hr2 = device_->CreateBuffer(&outputTestDesc, nullptr, &outputTestBuffer);
-        
-        bool inputZeroCopy = SUCCEEDED(hr1);
-        bool outputZeroCopy = SUCCEEDED(hr2);
-        
-        std::cout << "Input zero-copy support: " << (inputZeroCopy ? "Yes" : "No") << std::endl;
-        std::cout << "Output zero-copy support: " << (outputZeroCopy ? "Yes" : "No") << std::endl;
-        
-        // 至少有一种零拷贝支持就算成功
-        supportsZeroCopy_ = inputZeroCopy || outputZeroCopy;
     }
     
     bool CreateShaders() {
@@ -410,64 +366,22 @@ void main(PS_INPUT input) {
         
         // Create input buffer with iGPU optimization
         if (mapInputBuffer_) {
-            if (supportsZeroCopy_) {
-                // 对于支持零拷贝的iGPU，尝试创建可直接CPU写入的UAV缓冲区
-                inputBuffer_ = CreateZeroCopyBuffer(inputStrideBytes_ * height_, 
-                                                   D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE);
-                if (inputBuffer_) {
-                    inputUAVBuffer_ = inputBuffer_;  // 同一个缓冲区
-                    std::cout << "Using zero-copy buffer for input" << std::endl;
-                } else {
-                    // 零拷贝失败，创建传统的动态缓冲区 + UAV缓冲区
-                    inputBuffer_ = CreateDynamicBuffer(inputStrideBytes_ * height_, D3D11_BIND_SHADER_RESOURCE);
-                    inputUAVBuffer_ = CreateStructuredBuffer(inputStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
-                }
-            } else {
-                // 传统方法：动态缓冲区 + 默认UAV缓冲区
-                inputBuffer_ = CreateDynamicBuffer(inputStrideBytes_ * height_, D3D11_BIND_SHADER_RESOURCE);
-                inputUAVBuffer_ = CreateStructuredBuffer(inputStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
-            }
+            inputBuffer_ = CreateDynamicBuffer(inputStrideBytes_ * height_, D3D11_BIND_SHADER_RESOURCE);
+            inputUAVBuffer_ = CreateStructuredBuffer(inputStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
         } else {
             inputBuffer_ = CreateStructuredBuffer(inputStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
             inputUAVBuffer_ = inputBuffer_;
         }
         
         // Create output buffers with iGPU optimization
-        if (supportsZeroCopy_) {
-            // 尝试创建可直接CPU读取的输出缓冲区
-            outputYBuffer_ = CreateZeroCopyBuffer(outputYStrideBytes_ * height_, 
-                                                 D3D11_BIND_UNORDERED_ACCESS, true);
-            outputUBuffer_ = CreateZeroCopyBuffer(outputUStrideBytes_ * (height_ / 2), 
-                                                 D3D11_BIND_UNORDERED_ACCESS, true);
-            outputVBuffer_ = CreateZeroCopyBuffer(outputVStrideBytes_ * (height_ / 2), 
-                                                 D3D11_BIND_UNORDERED_ACCESS, true);
-            
-            if (outputYBuffer_ && outputUBuffer_ && outputVBuffer_) {
-                std::cout << "Using zero-copy buffers for output" << std::endl;
-                // 不需要staging buffers
-                stagingYBuffer_ = nullptr;
-                stagingUBuffer_ = nullptr;
-                stagingVBuffer_ = nullptr;
-            } else {
-                // 回退到传统方法
-                outputYBuffer_ = CreateStructuredBuffer(outputYStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
-                outputUBuffer_ = CreateStructuredBuffer(outputUStrideBytes_ * (height_ / 2), D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
-                outputVBuffer_ = CreateStructuredBuffer(outputVStrideBytes_ * (height_ / 2), D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
-                
-                stagingYBuffer_ = CreateStagingBuffer(outputYStrideBytes_ * height_);
-                stagingUBuffer_ = CreateStagingBuffer(outputUStrideBytes_ * (height_ / 2));
-                stagingVBuffer_ = CreateStagingBuffer(outputVStrideBytes_ * (height_ / 2));
-            }
-        } else {
-            // 传统方法
-            outputYBuffer_ = CreateStructuredBuffer(outputYStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
-            outputUBuffer_ = CreateStructuredBuffer(outputUStrideBytes_ * (height_ / 2), D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
-            outputVBuffer_ = CreateStructuredBuffer(outputVStrideBytes_ * (height_ / 2), D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
-            
-            stagingYBuffer_ = CreateStagingBuffer(outputYStrideBytes_ * height_);
-            stagingUBuffer_ = CreateStagingBuffer(outputUStrideBytes_ * (height_ / 2));
-            stagingVBuffer_ = CreateStagingBuffer(outputVStrideBytes_ * (height_ / 2));
-        }
+        
+        outputYBuffer_ = CreateStructuredBuffer(outputYStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
+        outputUBuffer_ = CreateStructuredBuffer(outputUStrideBytes_ * (height_ / 2), D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
+        outputVBuffer_ = CreateStructuredBuffer(outputVStrideBytes_ * (height_ / 2), D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
+        
+        stagingYBuffer_ = CreateStagingBuffer(outputYStrideBytes_ * height_);
+        stagingUBuffer_ = CreateStagingBuffer(outputUStrideBytes_ * (height_ / 2));
+        stagingVBuffer_ = CreateStagingBuffer(outputVStrideBytes_ * (height_ / 2));
         
         // Create UAVs
         inputBufferUAV_ = CreateBufferUAV(inputUAVBuffer_, (inputStrideBytes_ * height_) / sizeof(uint32_t));
@@ -573,26 +487,15 @@ public:
         
         // Update input buffer with iGPU optimization
         if (mapInputBuffer_) {
-            if (supportsZeroCopy_ && inputBuffer_ == inputUAVBuffer_) {
-                // 零拷贝模式：直接映射UAV缓冲区
-                D3D11_MAPPED_SUBRESOURCE mappedResource;
-                hr = context_->Map(inputBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-                if (SUCCEEDED(hr)) {
-                    memcpy(mappedResource.pData, inputBuffer, inputStrideBytes_ * height_);
-                    context_->Unmap(inputBuffer_, 0);
-                }
-            } else {
-                // 传统模式：映射动态缓冲区然后复制到UAV缓冲区
-                D3D11_MAPPED_SUBRESOURCE mappedResource;
-                hr = context_->Map(inputBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-                if (SUCCEEDED(hr)) {
-                    memcpy(mappedResource.pData, inputBuffer, inputStrideBytes_ * height_);
-                    context_->Unmap(inputBuffer_, 0);
-                }
-                
-                // Copy from mapped buffer to UAV buffer
-                context_->CopyResource(inputUAVBuffer_, inputBuffer_);
+            D3D11_MAPPED_SUBRESOURCE mappedResource;
+            hr = context_->Map(inputBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+            if (SUCCEEDED(hr)) {
+                memcpy(mappedResource.pData, inputBuffer, inputStrideBytes_ * height_);
+                context_->Unmap(inputBuffer_, 0);
             }
+            
+            // Copy from mapped buffer to UAV buffer
+            context_->CopyResource(inputUAVBuffer_, inputBuffer_);
         } else {
             context_->UpdateSubresource(inputBuffer_, 0, nullptr, inputBuffer, inputStrideBytes_, 0);
         }
@@ -668,95 +571,49 @@ public:
     std::tuple<char*, char*, char*> mapResult() {
         HRESULT hr;
         
-        if (supportsZeroCopy_ && !stagingYBuffer_) {
-            // 零拷贝模式：直接映射输出缓冲区
-            D3D11_MAPPED_SUBRESOURCE mappedYResource, mappedUResource, mappedVResource;
-            
-            hr = context_->Map(outputYBuffer_, 0, D3D11_MAP_READ, 0, &mappedYResource);
-            if (FAILED(hr)) {
-                throw std::runtime_error("Failed to map zero-copy Y buffer");
-            }
-            
-            hr = context_->Map(outputUBuffer_, 0, D3D11_MAP_READ, 0, &mappedUResource);
-            if (FAILED(hr)) {
-                context_->Unmap(outputYBuffer_, 0);
-                throw std::runtime_error("Failed to map zero-copy U buffer");
-            }
-            
-            hr = context_->Map(outputVBuffer_, 0, D3D11_MAP_READ, 0, &mappedVResource);
-            if (FAILED(hr)) {
-                context_->Unmap(outputYBuffer_, 0);
-                context_->Unmap(outputUBuffer_, 0);
-                throw std::runtime_error("Failed to map zero-copy V buffer");
-            }
-            
-            mappedYPtr_ = mappedYResource.pData;
-            mappedUPtr_ = mappedUResource.pData;
-            mappedVPtr_ = mappedVResource.pData;
-            
-            std::cout << "Using zero-copy read for output buffers" << std::endl;
-        } else {
-            // 传统方式：通过staging buffer
-            context_->CopyResource(stagingYBuffer_, outputYBuffer_);
-            context_->CopyResource(stagingUBuffer_, outputUBuffer_);
-            context_->CopyResource(stagingVBuffer_, outputVBuffer_);
-            
-            D3D11_MAPPED_SUBRESOURCE mappedYResource, mappedUResource, mappedVResource;
-            hr = context_->Map(stagingYBuffer_, 0, D3D11_MAP_READ, 0, &mappedYResource);
-            if (FAILED(hr)) {
-                throw std::runtime_error("Failed to map staging Y buffer");
-            }
-            
-            hr = context_->Map(stagingUBuffer_, 0, D3D11_MAP_READ, 0, &mappedUResource);
-            if (FAILED(hr)) {
-                context_->Unmap(stagingYBuffer_, 0);
-                throw std::runtime_error("Failed to map staging U buffer");
-            }
-            
-            hr = context_->Map(stagingVBuffer_, 0, D3D11_MAP_READ, 0, &mappedVResource);
-            if (FAILED(hr)) {
-                context_->Unmap(stagingYBuffer_, 0);
-                context_->Unmap(stagingUBuffer_, 0);
-                throw std::runtime_error("Failed to map staging V buffer");
-            }
-            
-            mappedYPtr_ = mappedYResource.pData;
-            mappedUPtr_ = mappedUResource.pData;
-            mappedVPtr_ = mappedVResource.pData;
+        context_->CopyResource(stagingYBuffer_, outputYBuffer_);
+        context_->CopyResource(stagingUBuffer_, outputUBuffer_);
+        context_->CopyResource(stagingVBuffer_, outputVBuffer_);
+        
+        D3D11_MAPPED_SUBRESOURCE mappedYResource, mappedUResource, mappedVResource;
+        hr = context_->Map(stagingYBuffer_, 0, D3D11_MAP_READ, 0, &mappedYResource);
+        if (FAILED(hr)) {
+            throw std::runtime_error("Failed to map staging Y buffer");
         }
+        
+        hr = context_->Map(stagingUBuffer_, 0, D3D11_MAP_READ, 0, &mappedUResource);
+        if (FAILED(hr)) {
+            context_->Unmap(stagingYBuffer_, 0);
+            throw std::runtime_error("Failed to map staging U buffer");
+        }
+        
+        hr = context_->Map(stagingVBuffer_, 0, D3D11_MAP_READ, 0, &mappedVResource);
+        if (FAILED(hr)) {
+            context_->Unmap(stagingYBuffer_, 0);
+            context_->Unmap(stagingUBuffer_, 0);
+            throw std::runtime_error("Failed to map staging V buffer");
+        }
+        
+        mappedYPtr_ = mappedYResource.pData;
+        mappedUPtr_ = mappedUResource.pData;
+        mappedVPtr_ = mappedVResource.pData;
         
         return std::make_tuple(static_cast<char*>(mappedYPtr_), static_cast<char*>(mappedUPtr_), static_cast<char*>(mappedVPtr_));
     }
 
     void unmapResult() {
-        if (supportsZeroCopy_ && !stagingYBuffer_) {
-            // 零拷贝模式：直接unmap输出缓冲区
-            if (mappedYPtr_ && outputYBuffer_) {
-                context_->Unmap(outputYBuffer_, 0);
-                mappedYPtr_ = nullptr;
-            }
-            if (mappedUPtr_ && outputUBuffer_) {
-                context_->Unmap(outputUBuffer_, 0);
-                mappedUPtr_ = nullptr;
-            }
-            if (mappedVPtr_ && outputVBuffer_) {
-                context_->Unmap(outputVBuffer_, 0);
-                mappedVPtr_ = nullptr;
-            }
-        } else {
-            // 传统方式：unmap staging buffers
-            if (mappedYPtr_ && stagingYBuffer_) {
-                context_->Unmap(stagingYBuffer_, 0);
-                mappedYPtr_ = nullptr;
-            }
-            if (mappedUPtr_ && stagingUBuffer_) {
-                context_->Unmap(stagingUBuffer_, 0);
-                mappedUPtr_ = nullptr;
-            }
-            if (mappedVPtr_ && stagingVBuffer_) {
-                context_->Unmap(stagingVBuffer_, 0);
-                mappedVPtr_ = nullptr;
-            }
+        // 传统方式：unmap staging buffers
+        if (mappedYPtr_ && stagingYBuffer_) {
+            context_->Unmap(stagingYBuffer_, 0);
+            mappedYPtr_ = nullptr;
+        }
+        if (mappedUPtr_ && stagingUBuffer_) {
+            context_->Unmap(stagingUBuffer_, 0);
+            mappedUPtr_ = nullptr;
+        }
+        if (mappedVPtr_ && stagingVBuffer_) {
+            context_->Unmap(stagingVBuffer_, 0);
+            mappedVPtr_ = nullptr;
         }
     }
     

@@ -207,17 +207,14 @@ Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
 Reuse Shader Storage Buffer Object
 
-run 15 seconds, performance mode, max fan speed
+run 10 seconds, performance mode, max fan speed
 
-Optimized: try zero copy
-Not optimized: always use fallback
-
-|InputBuffer   |Shader Type|Angle |D3D11 |D3D11 Optimized|
-|--------------|-----------|------|------|---------------|
-|MapBufferRange|Compute    |115.89|173.94|276.55         |
-|BufferSubData |Compute    |78.93 |29.12 |31.73          |
-|MapBufferRange|Render     |151.81|226.44|489.58         |
-|BufferSubData |Render     |95.27 |31.76 |33.49          |
+|InputBuffer   |Shader Type|Angle |D3D11  |
+|--------------|-----------|------|-------|
+|MapBufferRange|Compute    |129.03|199.535|
+|BufferSubData |Compute    |89.173|33.1227|
+|MapBufferRange|Render     |170.77|253.243|
+|BufferSubData |Render     |105.39|35.2336|
 
 
 ## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 4090 laptop
@@ -226,14 +223,14 @@ Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
 Reuse Shader Storage Buffer Object
 
-run 15 seconds, performance mode, max fan speed
+run 10 seconds, performance mode, max fan speed
 
-|InputBuffer   |Shader Type|Angle |D3D11 |D3D11 Optimized|
-|--------------|-----------|------|------|---------------|
-|MapBufferRange|Compute    |310.48|418   |1112.59        |
-|BufferSubData |Compute    |137.52|421.80|423.38         |
-|MapBufferRange|Render     |343.24|469.65|1418.1         |
-|BufferSubData |Render     |142.70|464.89|469.05         |
+|InputBuffer   |Shader Type|Angle |D3D11  |
+|--------------|-----------|------|-------|
+|MapBufferRange|Compute    |64.07 |255.178|
+|BufferSubData |Compute    |63.92 |266.991|
+|MapBufferRange|Render     |207.91|325.643|
+|BufferSubData |Render     |79.98 |324.834|
 
 
 ## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 2060 desktop
