@@ -470,18 +470,13 @@ private:
             waitEvents.push_back(waitEvent);
         }
         
-        func(cl::EnqueueArgs(computeQueue_, waitEvents, cl::NDRange(width_ / 2, height_ / 2)),
-        srcSvmPtr_, (cl_uint)srcStride_, 
-        ySvmPtr_, (cl_uint)yStride_, 
-        uSvmPtr_, (cl_uint)uStride_, 
-        vSvmPtr_, (cl_uint)vStride_,
-        yfactor_, ufactor_, vfactor_,
-        yrange_, uvrange_);
-        
-        // 获取kernel执行的event
-        cl::Event outEvent;
-        computeQueue_.enqueueMarkerWithWaitList(&waitEvents, &outEvent);
-        event = std::move(outEvent);
+        event = func(cl::EnqueueArgs(computeQueue_, waitEvents, cl::NDRange(width_ / 2, height_ / 2)),
+            srcSvmPtr_, (cl_uint)srcStride_, 
+            ySvmPtr_, (cl_uint)yStride_, 
+            uSvmPtr_, (cl_uint)uStride_, 
+            vSvmPtr_, (cl_uint)vStride_,
+            yfactor_, ufactor_, vfactor_,
+            yrange_, uvrange_);
         
         return true;
     }
@@ -499,18 +494,13 @@ private:
             waitEvents.push_back(waitEvent);
         }
         
-        func(cl::EnqueueArgs(computeQueue_, waitEvents, cl::NDRange(width_ / 2, height_ / 2)),
+        event = func(cl::EnqueueArgs(computeQueue_, waitEvents, cl::NDRange(width_ / 2, height_ / 2)),
             *tempSrcBuf_, (cl_uint)srcStride_, 
             *tempYBuf_, (cl_uint)yStride_, 
             *tempUBuf_, (cl_uint)uStride_, 
             *tempVBuf_, (cl_uint)vStride_,
             yfactor_, ufactor_, vfactor_,
             yrange_, uvrange_);
-        
-        // 获取kernel执行的event
-        cl::Event outEvent;
-        computeQueue_.enqueueMarkerWithWaitList(&waitEvents, &outEvent);
-        event = std::move(outEvent);
         
         return true;
     }
@@ -528,16 +518,13 @@ private:
             waitEvents.push_back(waitEvent);
         }
         
-        func(cl::EnqueueArgs(computeQueue_, waitEvents, cl::NDRange(width_ / 2, height_ / 2)),
+        event = func(cl::EnqueueArgs(computeQueue_, waitEvents, cl::NDRange(width_ / 2, height_ / 2)),
             *srcBuffer_, (cl_uint)srcStride_, 
             *yBuffer_, (cl_uint)yStride_, 
             *uBuffer_, (cl_uint)uStride_, 
             *vBuffer_, (cl_uint)vStride_,
             yfactor_, ufactor_, vfactor_,
             yrange_, uvrange_);
-        
-        // 获取kernel执行的event
-        computeQueue_.enqueueMarkerWithWaitList(&waitEvents, &event);
         
         return true;
     }

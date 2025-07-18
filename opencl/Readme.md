@@ -100,6 +100,7 @@ Sync mode (not pipelined)
 (collected at cde46e404a2cb8e11d2508e155e816469a12d538)
 
 Memory: DDR4 8G*4 2400MHz
+pipelined
 
 |HostMem|clBuf    |Method|ReuseClBuf |NoReuse    |
 |-------|---------|------|-----------|-----------|
