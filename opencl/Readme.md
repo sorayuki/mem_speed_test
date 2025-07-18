@@ -49,24 +49,25 @@ Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 Run in performance mode.
 Sync mode (not pipelined)
 
-|HostMem|clBuf    |Method|ReuseClBuf |NoReuse    |
-|-------|---------|------|-----------|-----------|
-|Regular|Regular  |R/WBuf|696.124    |406.763    |
-|Regular|Regular  |MapCpy|675.564    |401.541    |
-|Regular|SVM      |SvmCpy|700.021    |405.251    |
-|Regular|SVM      |MapCpy|765.042    |396.376    |
-|Regular|HostAlloc|R/WBuf|714.867    |409.717    |
-|Regular|HostAlloc|MapCpy|713.011    |382.909    |
-|Regular|UseHost  |/     |/          |345.01     |
-|Aligned|Regular  |R/WBuf|732.834    |448.527    |
-|Aligned|UseHost  |/     |/          |941.101    |
-|Aligned|SVM      |SvmCpy|787.509    |436.746    |
-|Pinned |Regular  |R/WBuf|781.758    |433.105    |
-|Pinned |HostAlloc|R/WBuf|792.734    |431.588    |
-|Pinned |SVM      |SvmCpy|792.734    |440.679    |
-|Regular|Regular  |Map   |2004.07    |580.949    |
-|Regular|SVM      |Map   |2052.12    |590.909    |
-|Regular|HostAlloc|Map   |2063.19    |589.251    |
+|HostMem|clBuf    |Method|ReuseClBuf |ReuseClBuf |NoReuse    |NoReuse    |
+|-------|---------|------|-----------|-----------|-----------|-----------|
+|       |         |      |Performance|Quiet      |Performance|Quiet      |
+|Regular|Regular  |R/WBuf|696.124    |418.515    |406.763    |           |
+|Regular|Regular  |MapCpy|675.564    |380.606    |401.541    |           |
+|Regular|SVM      |SvmCpy|700.021    |402.168    |405.251    |           |
+|Regular|SVM      |MapCpy|765.042    |365.445    |396.376    |           |
+|Regular|HostAlloc|R/WBuf|714.867    |399.886    |409.717    |           |
+|Regular|HostAlloc|MapCpy|713.011    |378.29     |382.909    |           |
+|Regular|UseHost  |/     |/          |/          |345.01     |127.319    |
+|Aligned|Regular  |R/WBuf|732.834    |426.259    |448.527    |           |
+|Aligned|UseHost  |/     |/          |/          |941.101    |364.323    |
+|Aligned|SVM      |SvmCpy|787.509    |443.993    |436.746    |           |
+|Pinned |Regular  |R/WBuf|781.758    |437.705    |433.105    |           |
+|Pinned |HostAlloc|R/WBuf|792.734    |441.432    |431.588    |           |
+|Pinned |SVM      |SvmCpy|792.734    |433.096    |440.679    |           |
+|Regular|Regular  |Map   |2004.07    |           |580.949    |           |
+|Regular|SVM      |Map   |2052.12    |           |590.909    |           |
+|Regular|HostAlloc|Map   |2063.19    |           |589.251    |           |
 
 ## Nvidia RTX 4090 laptop
 
@@ -75,24 +76,25 @@ Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 Run in performance mode.
 Sync mode (not pipelined)
 
-|HostMem|clBuf    |Method|ReuseClBuf |NoReuse    |
-|-------|---------|------|-----------|-----------|
-|Regular|Regular  |R/WBuf|664.03     |380.05     |
-|Regular|Regular  |MapCpy|501.50     |151.15     |
-|Regular|SVM      |SvmCpy|667.31     |126.91     |
-|Regular|SVM      |MapCpy|529.61     |119.39     |
-|Regular|HostAlloc|R/WBuf|669.14     |406.08     |
-|Regular|HostAlloc|MapCpy|508.60     |157.93     |
-|Regular|UseHost  |/     |/          |279.604    |
-|Aligned|Regular  |R/WBuf|669.95     |388.79     |
-|Aligned|UseHost  |/     |/          |291.224    |
-|Aligned|SVM      |SvmCpy|700.66     |132.62     |
-|Pinned |Regular  |R/WBuf|1082.74    |577.17     |
-|Pinned |HostAlloc|R/WBuf|1080.81    |581.04     |
-|Pinned |SVM      |SvmCpy|1075.46    |151.26     |
-|Regular|Regular  |Map   |960.02     |160.34     |
-|Regular|SVM      |Map   |1058.47    |141.33     |
-|Regular|HostAlloc|Map   |956.24     |163.18     |
+|HostMem|clBuf    |Method|ReuseClBuf |ReuseClBuf |NoReuse    |
+|-------|---------|------|-----------|-----------|-----------|
+|       |         |      |Performance|Quiet      |Performance|
+|Regular|Regular  |R/WBuf|664.03     |383.381    |380.05     |
+|Regular|Regular  |MapCpy|501.50     |250.837    |151.15     |
+|Regular|SVM      |SvmCpy|667.31     |309.502    |126.91     |
+|Regular|SVM      |MapCpy|529.61     |212.052    |119.39     |
+|Regular|HostAlloc|R/WBuf|669.14     |272.954    |406.08     |
+|Regular|HostAlloc|MapCpy|508.60     |187.856    |157.93     |
+|Regular|UseHost  |/     |/          |/          |279.604    |
+|Aligned|Regular  |R/WBuf|669.95     |285.887    |388.79     |
+|Aligned|UseHost  |/     |/          |/          |291.224    |
+|Aligned|SVM      |SvmCpy|700.66     |287.374    |132.62     |
+|Pinned |Regular  |R/WBuf|1082.74    |532.563    |577.17     |
+|Pinned |HostAlloc|R/WBuf|1080.81    |523.973    |581.04     |
+|Pinned |SVM      |SvmCpy|1075.46    |529.542    |151.26     |
+|Regular|Regular  |Map   |960.02     |           |160.34     |
+|Regular|SVM      |Map   |1058.47    |           |141.33     |
+|Regular|HostAlloc|Map   |956.24     |           |163.18     |
 
 
 ## Nvidia RTX 2060 desktop
