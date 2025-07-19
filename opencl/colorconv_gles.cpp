@@ -390,8 +390,11 @@ public:
         : useComputeShader_(useComputeShader), mapInputBuffer_(useMapInputBuffer), width_(width), height_(height), 
           inputStrideBytes_(inputStrideBytes), outputYStrideBytes_(outputYStrideBytes),
           outputUStrideBytes_(outputUVStrideBytes), outputVStrideBytes_(outputUVStrideBytes) {
-        
         CreateEGLContext();
+        const GLubyte* renderer = glGetString(GL_RENDERER);
+        const GLubyte* vendor = glGetString(GL_VENDOR);
+        std::cout << "Vendor: " << (vendor ? reinterpret_cast<const char*>(vendor) : "Unknown") << std::endl
+            << "Renderer: " << (renderer ? reinterpret_cast<const char*>(renderer) : "Unknown") << std::endl;
         BuildShader();
         CreateIOBuffers();
     }

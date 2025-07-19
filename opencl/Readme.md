@@ -199,8 +199,6 @@ Memory: DDR5 Single-Rank 16GB*2 5600MHz
 
 # Test Result For libANGLE / D3D11
 
-Host to device transfer may incorrect in map mode, because ```nvidia-smi dmon -s puct``` shows little host to device transfer.
-
 ## OpenGL ES via libANGLE / RAW D3D11: Intel UHD Graphics (i9-13900HX)
 
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
@@ -209,12 +207,12 @@ Reuse Shader Storage Buffer Object
 
 run 10 seconds, performance mode, max fan speed
 
-|InputBuffer   |Shader Type|Angle |D3D11  |
-|--------------|-----------|------|-------|
-|MapBufferRange|Compute    |129.03|199.535|
-|BufferSubData |Compute    |89.173|33.1227|
-|MapBufferRange|Render     |170.77|253.243|
-|BufferSubData |Render     |105.39|35.2336|
+|InputBuffer   |Shader Type|Angle  |D3D11  |
+|--------------|-----------|-------|-------|
+|MapBufferRange|Compute    |129.611|198.006|
+|BufferSubData |Compute    |86.5002|32.1769|
+|MapBufferRange|Render     |168.126|248.974|
+|BufferSubData |Render     |103.117|33.8445|
 
 
 ## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 4090 laptop
@@ -225,12 +223,12 @@ Reuse Shader Storage Buffer Object
 
 run 10 seconds, performance mode, max fan speed
 
-|InputBuffer   |Shader Type|Angle |D3D11  |
-|--------------|-----------|------|-------|
-|MapBufferRange|Compute    |64.07 |255.178|
-|BufferSubData |Compute    |63.92 |266.991|
-|MapBufferRange|Render     |207.91|325.643|
-|BufferSubData |Render     |79.98 |324.834|
+|InputBuffer   |Shader Type|Angle  |D3D11  |
+|--------------|-----------|-------|-------|
+|MapBufferRange|Compute    |326.087|428.857|
+|BufferSubData |Compute    |147.476|439.116|
+|MapBufferRange|Render     |353.326|488.517|
+|BufferSubData |Render     |93.1896|496.838|
 
 
 ## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 2060 desktop
@@ -239,10 +237,10 @@ Memory: DDR4 8G*4 2400MHz
 
 Reuse Shader Storage Buffer Object
 
-|InputBuffer   |Shader Type|Angle |D3D11 Optimized|
-|--------------|-----------|------|---------------|
-|MapBufferRange|Compute    |70.29 |450.3          |
-|BufferSubData |Compute    |68.02 |202.37         |
-|MapBufferRange|Render     |71.92 |693.2          |
-|BufferSubData |Render     |78.29 |233.25         |
+|InputBuffer   |Shader Type|Angle |
+|--------------|-----------|------|
+|MapBufferRange|Compute    |70.29 |
+|BufferSubData |Compute    |68.02 |
+|MapBufferRange|Render     |71.92 |
+|BufferSubData |Render     |78.29 |
 

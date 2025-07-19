@@ -705,6 +705,10 @@ void test() {
             for(int i = 0; i < width * height / 4; ++i) if (v[i] != -128) { fprintf(stderr, "check failed.\n"); break; }
         }
     }
+
+    for (auto& e : convertEvent)
+        if (e)
+            e->wait();
 }
 
 int main() {
