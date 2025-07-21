@@ -1,9 +1,10 @@
-#include <d3d11.h>
+﻿#include <d3d11.h>
 #include <d3dcompiler.h>
 #include <dxgi.h>
 #include <atlbase.h>
 
 #include <stdexcept>
+#include <chrono>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -319,6 +320,7 @@ void main(PS_INPUT input) {
     }
     
     processRegion(topLeft);
+    discard;
 }
 )";
             
@@ -364,17 +366,18 @@ void main(PS_INPUT input) {
         // Create constant buffer
         constantBuffer_ = CreateConstantBuffer(sizeof(ConstantBufferData));
         
-        // Create input buffer with iGPU optimization
+        // Create input buffer
         if (mapInputBuffer_) {
+            // 方法：使用两个buffer，dynamic用于快速写入，default用于GPU计算
             inputBuffer_ = CreateDynamicBuffer(inputStrideBytes_ * height_, D3D11_BIND_SHADER_RESOURCE);
             inputUAVBuffer_ = CreateStructuredBuffer(inputStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
         } else {
+            // 最快方法：直接使用DEFAULT buffer + UpdateSubresource
             inputBuffer_ = CreateStructuredBuffer(inputStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
             inputUAVBuffer_ = inputBuffer_;
         }
         
-        // Create output buffers with iGPU optimization
-        
+        // Create output buffers
         outputYBuffer_ = CreateStructuredBuffer(outputYStrideBytes_ * height_, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
         outputUBuffer_ = CreateStructuredBuffer(outputUStrideBytes_ * (height_ / 2), D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
         outputVBuffer_ = CreateStructuredBuffer(outputVStrideBytes_ * (height_ / 2), D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, nullptr);
@@ -461,6 +464,10 @@ void main(PS_INPUT input) {
         
         return true;
     }
+
+    size_t input_copy_bytes = 0;
+    using clock = std::chrono::steady_clock;
+    clock::duration copy_cost = std::chrono::seconds(0);
     
 public:
     ColorConvD3D11(bool useComputeShader, bool useMapInputBuffer, int width, int height, int inputStrideBytes, int outputYStrideBytes, int outputUVStrideBytes) 
@@ -480,24 +487,34 @@ public:
         
         // CComPtr will automatically release all resources
         // No need to manually call Release()
+
+        if (mapInputBuffer_) {
+            std::cout << "Copy input speed: " << (input_copy_bytes / 1048576.0 / (std::chrono::duration_cast<std::chrono::milliseconds>(copy_cost).count() / 1000.0)) << " MB/S" << std::endl;
+        }
     }
 
     void feedInput(char* inputBuffer) {
         HRESULT hr;
         
-        // Update input buffer with iGPU optimization
+        // 优化的输入缓冲区更新策略
         if (mapInputBuffer_) {
+            // 方法2：使用Map/Unmap + CopyResource（适合频繁更新的数据）
             D3D11_MAPPED_SUBRESOURCE mappedResource;
             hr = context_->Map(inputBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
             if (SUCCEEDED(hr)) {
+                auto startTime = clock::now();
                 memcpy(mappedResource.pData, inputBuffer, inputStrideBytes_ * height_);
+                input_copy_bytes += inputStrideBytes_ * height_;
+                copy_cost += clock::now() - startTime;
+
                 context_->Unmap(inputBuffer_, 0);
             }
             
-            // Copy from mapped buffer to UAV buffer
+            // 快速复制到UAV buffer
             context_->CopyResource(inputUAVBuffer_, inputBuffer_);
         } else {
-            context_->UpdateSubresource(inputBuffer_, 0, nullptr, inputBuffer, inputStrideBytes_, 0);
+            // 方法1：直接UpdateSubresource（通常是最快的）
+            context_->UpdateSubresource(inputUAVBuffer_, 0, nullptr, inputBuffer, inputStrideBytes_, 0);
         }
         
         // Update constant buffer
@@ -731,74 +748,6 @@ public:
         }
         
         return buffer;
-    }
-    
-    CComPtr<ID3D11Buffer> CreateZeroCopyBuffer(UINT byteWidth, UINT bindFlags, bool forRead = false) {
-        D3D11_BUFFER_DESC bufferDesc = {};
-        bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
-        bufferDesc.ByteWidth = byteWidth;
-        bufferDesc.CPUAccessFlags = forRead ? D3D11_CPU_ACCESS_READ : D3D11_CPU_ACCESS_WRITE;
-        bufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-        bufferDesc.StructureByteStride = sizeof(uint32_t);
-        
-        if (forRead) {
-            // 对于输出缓冲区，尝试创建可读取的UAV缓冲区
-            // 这种组合在大多数情况下不被支持，但iGPU可能例外
-            bufferDesc.BindFlags = bindFlags;
-            
-            CComPtr<ID3D11Buffer> buffer;
-            HRESULT hr = device_->CreateBuffer(&bufferDesc, nullptr, &buffer);
-            if (SUCCEEDED(hr)) {
-                std::cout << "Created zero-copy readable UAV buffer" << std::endl;
-                return buffer;
-            }
-            
-            // 如果失败，尝试创建可读取的纹理缓冲区
-            bufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-            hr = device_->CreateBuffer(&bufferDesc, nullptr, &buffer);
-            if (SUCCEEDED(hr)) {
-                std::cout << "Created zero-copy readable SRV buffer" << std::endl;
-                return buffer;
-            }
-        } else {
-            // 对于输入缓冲区，首先尝试创建支持UAV的零拷贝缓冲区
-            if (bindFlags & D3D11_BIND_UNORDERED_ACCESS) {
-                // 尝试创建同时支持UAV和CPU写入的缓冲区
-                bufferDesc.BindFlags = bindFlags;
-                
-                CComPtr<ID3D11Buffer> buffer;
-                HRESULT hr = device_->CreateBuffer(&bufferDesc, nullptr, &buffer);
-                if (SUCCEEDED(hr)) {
-                    std::cout << "Created zero-copy UAV buffer" << std::endl;
-                    return buffer;
-                }
-                
-                // 如果失败，尝试创建无CPU访问的UAV缓冲区
-                bufferDesc.CPUAccessFlags = 0;
-                bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-                
-                hr = device_->CreateBuffer(&bufferDesc, nullptr, &buffer);
-                if (SUCCEEDED(hr)) {
-                    std::cout << "Created standard UAV buffer (no zero-copy)" << std::endl;
-                    return buffer;
-                }
-            }
-            
-            // 作为备选方案，创建可写入的SRV缓冲区
-            bufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-            bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-            bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
-            
-            CComPtr<ID3D11Buffer> buffer;
-            HRESULT hr = device_->CreateBuffer(&bufferDesc, nullptr, &buffer);
-            if (SUCCEEDED(hr)) {
-                std::cout << "Created zero-copy writable SRV buffer (fallback)" << std::endl;
-                return buffer;
-            }
-        }
-        
-        // 如果所有尝试都失败，返回空指针
-        return nullptr;
     }
 };
 
