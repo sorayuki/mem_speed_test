@@ -466,7 +466,7 @@ void main(PS_INPUT input) {
     }
 
     size_t input_copy_bytes = 0;
-    using clock = std::chrono::steady_clock;
+    using clock = std::chrono::high_resolution_clock;
     clock::duration copy_cost = std::chrono::seconds(0);
     
 public:
@@ -489,7 +489,7 @@ public:
         // No need to manually call Release()
 
         if (mapInputBuffer_) {
-            std::cout << "Copy input speed: " << (input_copy_bytes / 1048576.0 / (std::chrono::duration_cast<std::chrono::milliseconds>(copy_cost).count() / 1000.0)) << " MB/S" << std::endl;
+            std::cout << "Write mapped buffer speed: " << (input_copy_bytes / 1048576.0 / (std::chrono::duration_cast<std::chrono::milliseconds>(copy_cost).count() / 1000.0)) << " MB/S" << std::endl;
         }
     }
 

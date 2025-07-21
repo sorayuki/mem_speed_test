@@ -17,11 +17,11 @@ int runtest() try {
                 std::cout << "Running test with compute shader: " << (i == 0 ? "Yes" : "No") 
                         << ", map input buffer: " << (j == 0 ? "Yes" : "No") << std::endl;
                 
-                steady_clock::duration copy_cost{ 0 };
+                high_resolution_clock::duration copy_cost{ 0 };
                 uint64_t copy_bytes{ 0 };
                 T colorConv(i == 0, j == 0, 1920, 1920, 1920 * 4, 1920, 1920 / 2);
 
-                auto beginTime = steady_clock::now();
+                auto beginTime = high_resolution_clock::now();
                 auto iter_begin = beginTime;
                 int frameCount = 0;
                 for(;;) {
