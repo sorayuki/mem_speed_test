@@ -237,10 +237,10 @@ Memory: DDR4 8G*4 2400MHz
 
 Reuse Shader Storage Buffer Object
 
-|InputBuffer   |Shader Type|Angle |
-|--------------|-----------|------|
-|MapBufferRange|Compute    |70.29 |
-|BufferSubData |Compute    |68.02 |
-|MapBufferRange|Render     |71.92 |
-|BufferSubData |Render     |78.29 |
+|InputBuffer   |Shader Type|Angle |D3D11  |
+|--------------|-----------|------|-------|
+|MapBufferRange|Compute    |64.364|206.495|
+|BufferSubData |Compute    |75.526|196.678|
+|MapBufferRange|Render     |85.336|233.463|
+|BufferSubData |Render     |83.813|238.692|
 
