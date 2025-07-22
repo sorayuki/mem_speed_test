@@ -3,6 +3,8 @@
 #include <dxgi.h>
 #include <atlbase.h>
 
+#include "speed_metrics.h"
+
 #include <stdexcept>
 #include <chrono>
 #include <string>
@@ -464,10 +466,6 @@ void main(PS_INPUT input) {
         
         return true;
     }
-
-    size_t input_copy_bytes = 0;
-    using clock = std::chrono::high_resolution_clock;
-    clock::duration copy_cost = std::chrono::seconds(0);
     
 public:
     ColorConvD3D11(bool useComputeShader, bool useMapInputBuffer, int width, int height, int inputStrideBytes, int outputYStrideBytes, int outputUVStrideBytes) 
@@ -487,10 +485,12 @@ public:
         
         // CComPtr will automatically release all resources
         // No need to manually call Release()
+    }
 
-        if (mapInputBuffer_) {
-            std::cout << "Write mapped buffer speed: " << (input_copy_bytes / 1048576.0 / (std::chrono::duration_cast<std::chrono::milliseconds>(copy_cost).count() / 1000.0)) << " MB/S" << std::endl;
-        }
+    SpeedMetrics inSpeed_;
+
+    double GetInputSpeedInMBps() const {
+        return inSpeed_.GetSpeedInMBps();
     }
 
     void feedInput(char* inputBuffer) {
@@ -502,11 +502,10 @@ public:
             D3D11_MAPPED_SUBRESOURCE mappedResource;
             hr = context_->Map(inputBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
             if (SUCCEEDED(hr)) {
-                auto startTime = clock::now();
-                memcpy(mappedResource.pData, inputBuffer, inputStrideBytes_ * height_);
-                input_copy_bytes += inputStrideBytes_ * height_;
-                copy_cost += clock::now() - startTime;
-
+                inSpeed_.RunCopy([&]() {
+                    memcpy(mappedResource.pData, inputBuffer, inputStrideBytes_ * height_);
+                    return inputStrideBytes_ * height_;
+                });
                 context_->Unmap(inputBuffer_, 0);
             }
             

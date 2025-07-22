@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <iostream>
 
+#include "speed_metrics.h"
+
 class ColorConvGLES {
     EGLDisplay eglDisplay_ = EGL_NO_DISPLAY;
     EGLContext eglContext_ = EGL_NO_CONTEXT;
@@ -166,13 +168,10 @@ void processRegion(ivec2 topLeft) {
     uint vPacked = 0u;
 
     // Process Y data - 16 pixels total (8 pixels x 2 rows)
-    #pragma unroll 2
     for (int dy = 0; dy < 2; dy++) {
         // Process 8 pixels per row, write 2 uints (4 bytes each)
-        #pragma unroll 2
         for (int dx = 0; dx < 8; dx += 4) {
             uint yPacked = 0u;
-            #pragma unroll 4
             for (int i = 0; i < 4; i++) {
                 int x = topLeft.x + dx + i;
                 int y = topLeft.y + dy;
@@ -290,6 +289,7 @@ void main() {
 
     if (topLeft.x >= width || topLeft.y >= height) {
         discard;
+        return;
     }
     
     processRegion(topLeft);
@@ -425,23 +425,32 @@ public:
         }
     }
 
+    SpeedMetrics inSpeed_;
+
+    double GetInputSpeedInMBps() const {
+        return inSpeed_.GetSpeedInMBps();
+    }
+
     void feedInput(char* inputBuffer) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, inputBufferId_);
         if (mapInputBuffer_) {
             void* mappedInput = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, inputStrideBytes_ * height_, GL_MAP_WRITE_BIT);
-            memcpy(mappedInput, inputBuffer, inputStrideBytes_ * height_);
+            inSpeed_.RunCopy([&]() {
+                memcpy(mappedInput, inputBuffer, inputStrideBytes_ * height_);
+                return inputStrideBytes_ * height_;
+            });
             glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
         } else {
             glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, inputStrideBytes_ * height_, inputBuffer);
         }
-        
+
+        glUseProgram(shaderProgram_);
+
         // Bind buffers to shader
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, inputBufferId_);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, outputYBufferId_);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, outputUBufferId_);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, outputVBufferId_);
-        
-        glUseProgram(shaderProgram_);
         
         // Set uniforms
         glUniform1i(glGetUniformLocation(shaderProgram_, "width"), width_);
@@ -458,6 +467,8 @@ public:
             glViewport(0, 0, (width_ + 7) / 8, (height_ + 1) / 2);
             glDisable(GL_DEPTH_TEST);
             glDisable(GL_STENCIL_TEST);
+            glDisable(GL_BLEND);
+            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
             // Render fullscreen quad
             glBindVertexArray(vao_);
             glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);

@@ -3,22 +3,26 @@
 #include <chrono>
 #include <algorithm>
 #include <iostream>
+#include <numeric>
+
+#include "speed_metrics.h"
 
 template<class T>
 int runtest() try {
-    std::vector<uint32_t> inputBuffer1(1920 * 1920, 0xffff0000); // Example input buffer
-    std::vector<uint32_t> inputBuffer2(1920 * 1920, 0xff00ff00); // Example input buffer
+    std::vector<uint32_t> inputBuffer1(1920 * 1920, 0xff800000); // Example input buffer
+    std::vector<uint32_t> inputBuffer2(1920 * 1920, 0xff008000); // Example input buffer
     std::vector<char> outputYBuffer(1920 * 1920), outputUBuffer(1920 * 1920 / 4), outputVBuffer(1920 * 1920 / 4);
     
     for(int i = 0; i < 2; ++i) {
         for(int j = 0; j < 2; ++j) {
-            auto do_test = [&]<typename T>() {
+            auto do_test = [&]() {
                 using namespace std::chrono;
                 std::cout << "Running test with compute shader: " << (i == 0 ? "Yes" : "No") 
                         << ", map input buffer: " << (j == 0 ? "Yes" : "No") << std::endl;
-                
-                high_resolution_clock::duration copy_cost{ 0 };
-                uint64_t copy_bytes{ 0 };
+
+                uint64_t errval = 0;
+
+                SpeedMetrics outSpeed;
                 T colorConv(i == 0, j == 0, 1920, 1920, 1920 * 4, 1920, 1920 / 2);
 
                 auto beginTime = high_resolution_clock::now();
@@ -30,14 +34,18 @@ int runtest() try {
                     else
                         colorConv.feedInput((char*)inputBuffer2.data());
                     auto [mappedY, mappedU, mappedV] = colorConv.mapResult();
-                    auto startTime = steady_clock::now();
-                    memcpy(outputYBuffer.data(), mappedY, 1920 * 1920);
-                    copy_bytes += 1920 * 1920;
-                    memcpy(outputUBuffer.data(), mappedU, 1920 * 1920 / 4);
-                    copy_bytes += 1920 * 1920 / 4;
-                    memcpy(outputVBuffer.data(), mappedV, 1920 * 1920 / 4);
-                    copy_bytes += 1920 * 1920 / 4;
-                    copy_cost += steady_clock::now() - startTime;
+                    auto py = mappedY, pu = mappedU, pv = mappedV;
+                    outSpeed.RunCopy([&]() {
+                        uint64_t copy_bytes = 0;
+                        memcpy(outputYBuffer.data(), py, 1920 * 1920);
+                        copy_bytes += 1920 * 1920;
+                        memcpy(outputUBuffer.data(), pu, 1920 * 1920 / 4);
+                        copy_bytes += 1920 * 1920 / 4;
+                        memcpy(outputVBuffer.data(), pv, 1920 * 1920 / 4);
+                        copy_bytes += 1920 * 1920 / 4;
+                        return copy_bytes;
+                    });
+
                     colorConv.unmapResult();
                     ++frameCount;
 
@@ -56,31 +64,40 @@ int runtest() try {
                     }
 
                     if (frameCount == 1) {
-                        if (std::equal_range(outputYBuffer.begin(), outputYBuffer.end(), -107).first == outputYBuffer.end()) {
-                            std::cerr << "check fail" << std::endl;
-                        }
-                        if (std::equal_range(outputUBuffer.begin(), outputUBuffer.end(), 43).first == outputUBuffer.end()) {
-                            std::cerr << "check fail" << std::endl;
-                        }
-                        if (std::equal_range(outputVBuffer.begin(), outputVBuffer.end(), 21).first == outputVBuffer.end()) {
-                            std::cerr << "check fail" << std::endl;
-                        }
+                        uint64_t errval_local = 0;
+
+                        errval_local = std::accumulate(outputYBuffer.begin(), outputYBuffer.end(), errval_local, [](uint64_t sum, char val) {
+                            return sum + std::abs((short)val - 75);
+                        });
+                        errval_local = std::accumulate(outputUBuffer.begin(), outputUBuffer.end(), errval_local, [](uint64_t sum, char val) {
+                            return sum + std::abs((short)val - 85);
+                        });
+                        errval_local = std::accumulate(outputVBuffer.begin(), outputVBuffer.end(), errval_local, [](uint64_t sum, char val) {
+                            return sum + std::abs((short)val - 74);
+                        });
+
+                        errval += errval_local;
                     }
                     else if (frameCount == 2) {
-                        if (std::equal_range(outputYBuffer.begin(), outputYBuffer.end(), 29).first == outputYBuffer.end()) {
-                            std::cerr << "check fail" << std::endl;
-                        }
-                        if (std::equal_range(outputUBuffer.begin(), outputUBuffer.end(), -1).first == outputUBuffer.end()) {
-                            std::cerr << "check fail" << std::endl;
-                        }
-                        if (std::equal_range(outputVBuffer.begin(), outputVBuffer.end(), 107).first == outputVBuffer.end()) {
-                            std::cerr << "check fail" << std::endl;
-                        }
+                        uint64_t errval_local = 0;
+
+                        errval_local = std::accumulate(outputYBuffer.begin(), outputYBuffer.end(), errval_local, [](uint64_t sum, char val) {
+                            return sum + std::abs((short)val - 14);
+                        });
+                        errval_local = std::accumulate(outputUBuffer.begin(), outputUBuffer.end(), errval_local, [](uint64_t sum, char val) {
+                            return sum + std::abs((short)val - (-64));
+                        });
+                        errval_local = std::accumulate(outputVBuffer.begin(), outputVBuffer.end(), errval_local, [](uint64_t sum, char val) {
+                            return sum + std::abs((short)val - 117);
+                        });
+
+                        errval += errval_local;
                     }
                 }
-                std::cout << "Read mapped buffer speed: " << copy_bytes / 1024.0 / 1024.0 / (duration_cast<milliseconds>(copy_cost).count() / 1000.0) << " MB/s" << std::endl;
+                std::cout << "In / Out memcpy (MB/s): " << colorConv.GetInputSpeedInMBps() << " / " << outSpeed.GetSpeedInMBps() << std::endl;
+                std::cout << "Error distance: " << errval * 1.0 / 2 << std::endl;
             };
-            do_test.template operator()<T>();
+            do_test();
         }
     };
 
