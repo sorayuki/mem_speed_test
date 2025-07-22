@@ -231,6 +231,9 @@ run 10 seconds, performance mode, max fan speed
 |BufferSubData |Render     |93.1896|496.838|
 
 
+Conclusion: The bottleneck in the test of D3D11 is memcpy.
+
+
 ## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 2060 desktop
 
 Memory: DDR4 8G*4 2400MHz
