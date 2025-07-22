@@ -285,7 +285,7 @@ precision highp int;
 )" + std::string(sharedShaderCode) + R"(
 
 void main() {
-    ivec2 topLeft = ivec2(gl_FragCoord.xy * vec2(8, 2));
+    ivec2 topLeft = ivec2(int(gl_FragCoord.x) * 8, int(gl_FragCoord.y) * 2);
 
     if (topLeft.x >= width || topLeft.y >= height) {
         discard;
