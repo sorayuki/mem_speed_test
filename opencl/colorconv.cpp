@@ -176,6 +176,12 @@ public:
         auto svm_caps = std::get<1>(selected).getInfo<CL_DEVICE_SVM_CAPABILITIES>();
         supportSvm_ = !!svm_caps;
 
+        std::string extensions = std::get<0>(selected).getInfo<CL_PLATFORM_EXTENSIONS>();
+        for(auto& c: extensions) {
+            if (c == ' ') c = '\n';
+        }
+        fprintf(stderr, "EXTENSIONS:\n%s\n", extensions.c_str());
+
         std::string sourcecode{ R"OPENCLCODE(
             kernel void bgra_to_i420_frame(
 	            global const uchar* src, int stride,

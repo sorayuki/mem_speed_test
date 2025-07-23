@@ -214,6 +214,8 @@ run 10 seconds, performance mode, max fan speed
 |MapBufferRange|Render     |168.126|248.974|
 |BufferSubData |Render     |103.117|33.8445|
 
++ ANGLE Render Error distance: 0
++ D3D11 Render Error distance: 86342
 
 ## OpenGL ES via libANGLE / RAW D3D11: Nvidia RTX 4090 laptop
 
@@ -225,11 +227,13 @@ run 10 seconds, performance mode, max fan speed
 
 |InputBuffer   |Shader Type|Angle  |D3D11  |
 |--------------|-----------|-------|-------|
-|MapBufferRange|Compute    |326.087|428.857|
-|BufferSubData |Compute    |147.476|439.116|
-|MapBufferRange|Render     |353.326|488.517|
-|BufferSubData |Render     |93.1896|496.838|
+|MapBufferRange|Compute    |309.458|413.403|
+|BufferSubData |Compute    |144.533|416.399|
+|MapBufferRange|Render     |342.873|444.038|
+|BufferSubData |Render     |160.089|447.897|
 
++ ANGLE Render Error distance: 0
++ D3D11 Render Error distance: 86342
 
 Conclusion: The bottleneck in the test of D3D11 is memcpy.
 

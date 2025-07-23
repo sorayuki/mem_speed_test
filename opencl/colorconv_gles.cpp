@@ -434,7 +434,7 @@ public:
     void feedInput(char* inputBuffer) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, inputBufferId_);
         if (mapInputBuffer_) {
-            void* mappedInput = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, inputStrideBytes_ * height_, GL_MAP_WRITE_BIT);
+            void* mappedInput = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, inputStrideBytes_ * height_, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT);
             inSpeed_.RunCopy([&]() {
                 memcpy(mappedInput, inputBuffer, inputStrideBytes_ * height_);
                 return inputStrideBytes_ * height_;

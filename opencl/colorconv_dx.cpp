@@ -315,7 +315,7 @@ struct PS_INPUT {
 };
 
 void main(PS_INPUT input) {
-    int2 topLeft = int2(input.position.xy * float2(8, 2));
+    int2 topLeft = int2(input.position.x * 8, input.position.y * 2);
 
     if (topLeft.x >= width || topLeft.y >= height) {
         discard;
