@@ -457,7 +457,7 @@ void main(PS_INPUT input) {
         blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
         blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
         blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-        blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        blendDesc.RenderTarget[0].RenderTargetWriteMask = 0;
         
         hr = device_->CreateBlendState(&blendDesc, &blendState_);
         if (FAILED(hr)) {
