@@ -89,8 +89,8 @@ class ColorConvGLES {
         
         // Create PBuffer surface
         EGLint pbufferAttribs[] = {
-            EGL_WIDTH, 1,
-            EGL_HEIGHT, 1,
+            EGL_WIDTH, 1920 / 8,
+            EGL_HEIGHT, 1920 / 2,
             EGL_NONE
         };
         

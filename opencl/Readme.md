@@ -251,3 +251,107 @@ Reuse Shader Storage Buffer Object
 |MapBufferRange|Render     |85.336|233.463|
 |BufferSubData |Render     |83.813|238.692|
 
+# Test Result for Native OpenGL ES
+
+Memcpy: MB/S
+
+**May not use up GPU Power, two instance may double the speed.**
+
+**CPU Frequency may not run in max possibility.**
+
+## Xiaomi 15
+
+Vendor: Qualcomm
+
+Renderer: Adreno (TM) 830
+
+|InputBuffer   |Shader Type|FPS   |In Memcpy|Out Memcpy|
+|--------------|-----------|------|---------|----------|
+|MapBufferRange|Compute    |63.224|6646.19  |6604.9    |
+|BufferSubData |Compute    |60.325|         |5482.2    |
+|MapBufferRange|Render     |252.94|8154.76  |8222.38   |
+|BufferSubData |Render     |243.82|         |7840.81   |
+
+
+## Xiaomi 11 Ultra
+
+Vendor: Qualcomm
+
+Renderer: Adreno (TM) 660
+
+|InputBuffer   |Shader Type|FPS   |In Memcpy|Out Memcpy|
+|--------------|-----------|------|---------|----------|
+|MapBufferRange|Compute    |18.978|5595.39  |277.163   |
+|BufferSubData |Compute    |17.690|         |236.184   |
+|MapBufferRange|Render     |80.225|6631.7   |811.221   |
+|BufferSubData |Render     |81.520|         |823.722   |
+
+
+## RedMagic 8 Pro
+
+Vendor: Qualcomm
+
+Renderer: Adreno (TM) 740
+
+破坏神模式
+
+|InputBuffer   |Shader Type|FPS   |In Memcpy|Out Memcpy|
+|--------------|-----------|------|---------|----------|
+|MapBufferRange|Compute    |346.47|14445.4  |14929.9   |
+|BufferSubData |Compute    |350.71|         |14674.5   |
+|MapBufferRange|Render     |386.79|14306.7  |14688.1   |
+|BufferSubData |Render     |386.11|         |14717.5   |
+
+
+## RedMagic 10 Pro
+
+Vendor: Qualcomm
+
+Renderer: Adreno (TM) 830
+
+破坏神模式
+
+|InputBuffer   |Shader Type|FPS   |In Memcpy|Out Memcpy|
+|--------------|-----------|------|---------|----------|
+|MapBufferRange|Compute    |204.90|28346.2  |33469.2   |
+|BufferSubData |Compute    |203.48|         |34319.5   |
+|MapBufferRange|Render     |799.56|34643.4  |36895.6   |
+|BufferSubData |Render     |801.22|         |37029.5   |
+
+
+不开破坏神模式
+
+|InputBuffer   |Shader Type|FPS   |In Memcpy|Out Memcpy|
+|--------------|-----------|------|---------|----------|
+|MapBufferRange|Compute    |57.468|4995.21  |4932.67   |
+|BufferSubData |Compute    |58.480|         |4849.23   |
+|MapBufferRange|Render     |220.3 |7687.73  |7698.65   |
+|BufferSubData |Render     |209.45|         |7374.38   |
+
+
+## OnePlus 7 Pro
+
+Vendor: Qualcomm
+
+Renderer: Adreno (TM) 640
+
+|InputBuffer   |Shader Type|FPS   |In Memcpy|Out Memcpy|
+|--------------|-----------|------|---------|----------|
+|MapBufferRange|Compute    |11.814|5164.93  |189.018   |
+|BufferSubData |Compute    |10.317|         |138.529   |
+|MapBufferRange|Render     |38.237|4549.28  |308.266   |
+|BufferSubData |Render     |44.469|         |376.976   |
+
+
+## Oppo Find X8 s
+
+Vendor: ARM
+
+Renderer: Mali-G925-Immortalis MC12
+
+|InputBuffer   |Shader Type|FPS   |In Memcpy|Out Memcpy|
+|--------------|-----------|------|---------|----------|
+|MapBufferRange|Compute    |79.383|7998.11  |831.042   |
+|BufferSubData |Compute    |79.868|         |809.325   |
+|MapBufferRange|Render     |66.049|7647.21  |710.031   |
+|BufferSubData |Render     |68.985|         |756.706   |

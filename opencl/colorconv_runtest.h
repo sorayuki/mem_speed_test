@@ -11,7 +11,7 @@ template<class T>
 int runtest() try {
     std::vector<uint32_t> inputBuffer1(1920 * 1920, 0xff800000); // Example input buffer
     std::vector<uint32_t> inputBuffer2(1920 * 1920, 0xff008000); // Example input buffer
-    std::vector<char> outputYBuffer(1920 * 1920), outputUBuffer(1920 * 1920 / 4), outputVBuffer(1920 * 1920 / 4);
+    std::vector<uint8_t> outputYBuffer(1920 * 1920), outputUBuffer(1920 * 1920 / 4), outputVBuffer(1920 * 1920 / 4);
     
     for(int i = 0; i < 2; ++i) {
         for(int j = 0; j < 2; ++j) {
@@ -66,14 +66,14 @@ int runtest() try {
                     if (frameCount == 1) {
                         uint64_t errval_local = 0;
 
-                        errval_local = std::accumulate(outputYBuffer.begin(), outputYBuffer.end(), errval_local, [](uint64_t sum, char val) {
-                            return sum + std::abs((short)val - 75);
+                        errval_local = std::accumulate(outputYBuffer.begin(), outputYBuffer.end(), errval_local, [](uint64_t sum, uint8_t val) {
+                            return sum + std::abs((int16_t)(uint16_t)val - 75);
                         });
-                        errval_local = std::accumulate(outputUBuffer.begin(), outputUBuffer.end(), errval_local, [](uint64_t sum, char val) {
-                            return sum + std::abs((short)val - 85);
+                        errval_local = std::accumulate(outputUBuffer.begin(), outputUBuffer.end(), errval_local, [](uint64_t sum, uint8_t val) {
+                            return sum + std::abs((int16_t)(uint16_t)val - 85);
                         });
-                        errval_local = std::accumulate(outputVBuffer.begin(), outputVBuffer.end(), errval_local, [](uint64_t sum, char val) {
-                            return sum + std::abs((short)val - 74);
+                        errval_local = std::accumulate(outputVBuffer.begin(), outputVBuffer.end(), errval_local, [](uint64_t sum, uint8_t val) {
+                            return sum + std::abs((int16_t)(uint16_t)val - 74);
                         });
 
                         errval += errval_local;
@@ -81,14 +81,14 @@ int runtest() try {
                     else if (frameCount == 2) {
                         uint64_t errval_local = 0;
 
-                        errval_local = std::accumulate(outputYBuffer.begin(), outputYBuffer.end(), errval_local, [](uint64_t sum, char val) {
-                            return sum + std::abs((short)val - 14);
+                        errval_local = std::accumulate(outputYBuffer.begin(), outputYBuffer.end(), errval_local, [](uint64_t sum, uint8_t val) {
+                            return sum + std::abs((int16_t)(uint16_t)val - 14);
                         });
-                        errval_local = std::accumulate(outputUBuffer.begin(), outputUBuffer.end(), errval_local, [](uint64_t sum, char val) {
-                            return sum + std::abs((short)val - (-64));
+                        errval_local = std::accumulate(outputUBuffer.begin(), outputUBuffer.end(), errval_local, [](uint64_t sum, uint8_t val) {
+                            return sum + std::abs((int16_t)(uint16_t)val - 192);
                         });
-                        errval_local = std::accumulate(outputVBuffer.begin(), outputVBuffer.end(), errval_local, [](uint64_t sum, char val) {
-                            return sum + std::abs((short)val - 117);
+                        errval_local = std::accumulate(outputVBuffer.begin(), outputVBuffer.end(), errval_local, [](uint64_t sum, uint8_t val) {
+                            return sum + std::abs((int16_t)(uint16_t)val - 117);
                         });
 
                         errval += errval_local;
