@@ -10,6 +10,7 @@
 #include <numeric>
 #include <memory>
 #include <chrono>
+#include <future>
 #include <windows.h>
 #include <assert.h>
 
@@ -22,10 +23,10 @@ namespace {
     cl::Program program_;
     size_t gmemAlign_ = 4;
     bool reuseBuffer_ = true;
+    bool pipelineMode_ = false;
     bool supportSvm_ = false;
-
-    void* (*mymemcpy)(void* dst, const void* src, size_t size) = memcpy;
-
+    
+    // Memory Copy Mode
     void* no_memcpy(void* dst, const void* src, size_t size) {
         auto ps = (const char*)src;
         auto pd = (char*)dst;
@@ -35,6 +36,23 @@ namespace {
         return dst;
     }
     
+    void* para_memcpy(void* dst, const void* src, size_t size) {
+        std::future<void*> waitlist[3];
+        for(int i = 0; i < 4; ++i) {
+            int copyoffset = i * size / 4;
+            int copysize = (i + 1) * size / 4 - copyoffset;
+            if (i == 3) {
+                memcpy((char*)dst + copyoffset, (const char*)src + copyoffset, copysize);
+            } else {
+                waitlist[i] = std::async(std::launch::async, memcpy, (char*)dst + copyoffset, (const char*)src + copyoffset, copysize);
+            }
+        }
+        return dst;
+    }
+
+    void* (*mymemcpy)(void* dst, const void* src, size_t size) = memcpy;
+    
+    // Buffer Mode
     const int BM_USE_HOST = 0b00000001;
     const int BM_DEVICE   = 0b00000010;
     const int BM_HOST     = 0b00000100;
@@ -670,7 +688,8 @@ void test() {
     for(int ind = 0;; ++ind) {
         // pipeline mode or sync mode
         int x[] = { (ind + 2) % 3, (ind + 1) % 3, ind % 3 };
-        // int x[] = { 0, 0, 0 };
+        if (pipelineMode_ == 0) for(auto& i: x) i = 0;
+
         auto diff = std::chrono::steady_clock::now() - begin;
         auto iter_diff = std::chrono::steady_clock::now() - iter_begin;
         if (iter_diff > std::chrono::seconds(1)) {
@@ -722,57 +741,70 @@ void test() {
 }
 
 int main() {
-    fprintf(stderr, "%s", "Reuse opencl buffer? (0, 1), skip memcpy? (0, 1)\n");
-    int skipmemcpy = 0;
-    scanf("%d %d", &reuseBuffer_, &skipmemcpy);
+    fprintf(stderr, "%s\n", "OpenCL Buffer? (0 = device buffer, 1 = svm buffer, 2 = host buffer, 3 = direct)");
+    int bufferType;
+    scanf("%d", &bufferType);
 
-    if (skipmemcpy)
-        mymemcpy = &no_memcpy;
-
-    struct {
-        const char* msg;
-        int flags;
-        int allocType;
-    } items[] = {
-        { "Regular memory, device buffer, copy", BM_DEVICE | BM_COPY, 0 },
-        { "Regular memory, device buffer, map", BM_DEVICE | BM_MAP, 0 },
-        { "Regular memory, svm buffer, copy", BM_SVM | BM_COPY, 0 },
-        { "Regular memory, svm buffer, map", BM_SVM | BM_MAP, 0 },
-        { "Regular memory, host buffer, copy", BM_HOST | BM_COPY, 0 },
-        { "Regular memory, host buffer, map", BM_HOST | BM_MAP, 0 },
-        { "Regular memory, direct", BM_USE_HOST, 0 },
-        { "Aligned memory, device buffer, copy", BM_DEVICE | BM_COPY, 1 },
-        { "Aligned memory, direct", BM_USE_HOST, 1 },
-        { "Aligned memory, svm buffer, copy", BM_SVM | BM_COPY, 1 },
-        { "Pinned memory, device buffer, copy", BM_DEVICE | BM_COPY, 2 },
-        { "Pinned memory, host buffer, copy", BM_HOST | BM_COPY, 2 },
-        { "Pinned memory, svm buffer, copy", BM_SVM | BM_COPY, 2 },
-        { 0, 0, 0 }
-    };
-
-    int i = 0;
-    for(;; ++i) {
-        if (items[i].msg == 0) break;
-        if (skipmemcpy && !(items[i].flags & BM_MAP)) continue;
-        if (reuseBuffer_ && (items[i].flags & BM_USE_HOST)) continue;
-        if (!supportSvm_ && (items[i].flags & BM_SVM)) continue;
-        fprintf(stderr, "%d: %s\n", i, items[i].msg);
+    if (bufferType == 0) {
+        bufferMode_ = BM_DEVICE;
+    } else if (bufferType == 1) {
+        bufferMode_ = BM_SVM;
+    } else if (bufferType == 2) {
+        bufferMode_ = BM_HOST;
+    } else if (bufferType == 3) {
+        bufferMode_ = BM_USE_HOST;
+    } else {
+        throw std::runtime_error("Invalid buffer type");
     }
 
-    int memtype = i;
-    scanf("%d", &memtype);
-    bufferMode_ = items[memtype].flags;
+    fprintf(stderr, "%s\n", "Reuse OpenCL Buffer object? (0 = no, 1 = yes)");
+    scanf("%d", &reuseBuffer_);
+
+    fprintf(stderr, "%s\n", "Buffer copy mode? (0 = OpenCL Enqueue, 1 = Map)");
+    int bufferCopyMode;
+    scanf("%d", &bufferCopyMode);
+
+    if (bufferCopyMode == 0) {
+        bufferMode_ |= BM_COPY;
+    } else if (bufferCopyMode == 1) {
+        bufferMode_ |= BM_MAP;
+    } else {
+        throw std::runtime_error("Invalid buffer copy mode");
+    }
+
+    if (bufferCopyMode == 1) {
+        fprintf(stderr, "%s\n", "memcpy implementation? (0 = memcpy, 1 = no copy, 2 = parallel copy)");
+        int memcpyImpl;
+        scanf("%d", &memcpyImpl);
+        if (memcpyImpl == 0) {
+            mymemcpy = &memcpy;
+        } else if (memcpyImpl == 1) {
+            mymemcpy = &no_memcpy;
+        } else if (memcpyImpl == 2) {
+            mymemcpy = &para_memcpy;
+        } else {
+            throw std::runtime_error("Invalid memcpy implementation");
+        }
+    }
+
+    fprintf(stderr, "Host memory mode? (0 = regular, 1 = aligned, 2 = pinned)\n");
+    int hostMemoryMode;
+    scanf("%d", &hostMemoryMode);
+
+    fprintf(stderr, "Use Pipeline? (0 = no, 1 = yes)\n");
+    scanf("%d", &pipelineMode_);
 
     auto innerSwitch = [&](auto t) {
         using T = decltype(t);
-        switch(items[memtype].allocType) {
+        switch(hostMemoryMode) {
             case 0: test<RegularMemory, T>(); break;
             case 1: test<AlignedMemory, T>(); break;
             case 2: test<PinnedMemory, T>(); break;
+            default: throw std::runtime_error("Invalid host memory mode");
         }
     };
 
-    if (items[memtype].flags & BM_SVM) {
+    if (bufferMode_ & BM_SVM) {
         innerSwitch((void*)nullptr);
     } else {
         innerSwitch(cl::Buffer{});
