@@ -598,12 +598,12 @@ private:
             waitEvents.push_back(event);
         }
         
-        void* hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempYBuf_, true, CL_MAP_READ, 0, ySize_, &waitEvents, nullptr);
+        void* hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempYBuf_, false, CL_MAP_READ, 0, ySize_, &waitEvents, nullptr);
         deviceToHostQueue_.enqueueUnmapMemObject(*tempYBuf_, hostptr);
-        hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempUBuf_, true, CL_MAP_READ, 0, uSize_, &waitEvents, nullptr);
+        hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempUBuf_, false, CL_MAP_READ, 0, uSize_, &waitEvents, nullptr);
         deviceToHostQueue_.enqueueUnmapMemObject(*tempUBuf_, hostptr);
         cl::Event outEvent;
-        hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempVBuf_, true, CL_MAP_READ, 0, vSize_, &waitEvents, &outEvent);
+        hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempVBuf_, false, CL_MAP_READ, 0, vSize_, &waitEvents, &outEvent);
         deviceToHostQueue_.enqueueUnmapMemObject(*tempVBuf_, hostptr);
         event = std::move(outEvent);
         return true;
@@ -669,8 +669,8 @@ void test() {
 
     for(int ind = 0;; ++ind) {
         // pipeline mode or sync mode
-        // int x[] = { (ind + 2) % 3, (ind + 1) % 3, ind % 3 };
-        int x[] = { 0, 0, 0 };
+        int x[] = { (ind + 2) % 3, (ind + 1) % 3, ind % 3 };
+        // int x[] = { 0, 0, 0 };
         auto diff = std::chrono::steady_clock::now() - begin;
         auto iter_diff = std::chrono::steady_clock::now() - iter_begin;
         if (iter_diff > std::chrono::seconds(1)) {
@@ -690,6 +690,13 @@ void test() {
         // 使用转换器对象执行转换
         if (convertEvent[x[0]]) {
             convertEvent[x[0]]->wait();
+
+            if (frames == 1) {
+	            for(int i = 0; i < width * height; ++i) if (y[i] != -21) { fprintf(stderr, "check failed.\n"); break; }
+	            for(int i = 0; i < width * height / 4; ++i) if (u[i] != 126) { fprintf(stderr, "check failed.\n"); break; }
+	            for(int i = 0; i < width * height / 4; ++i) if (v[i] != -128) { fprintf(stderr, "check failed.\n"); break; }
+	        }
+
             iter_frames += 1;
             frames += 1;
         } else {
@@ -704,17 +711,14 @@ void test() {
         if (convertEvent[x[2]]) {
             converter[x[2]].executeOutput(y, u, v, *convertEvent[x[2]]);
         }
-
-        if (frames == 1) {
-            for(int i = 0; i < width * height; ++i) if (y[i] != -21) { fprintf(stderr, "check failed.\n"); break; }
-            for(int i = 0; i < width * height / 4; ++i) if (u[i] != 126) { fprintf(stderr, "check failed.\n"); break; }
-            for(int i = 0; i < width * height / 4; ++i) if (v[i] != -128) { fprintf(stderr, "check failed.\n"); break; }
-        }
     }
 
-    for (auto& e : convertEvent)
-        if (e)
-            e->wait();
+    cl::CommandQueue* queues[] = { &deviceToHostQueue_, &hostToDeviceQueue_, &computeQueue_ };
+    for (auto& q : queues) {
+        cl::Event ev;
+        q->enqueueMarkerWithWaitList(nullptr, &ev);
+        ev.wait();
+    }
 }
 
 int main() {
