@@ -70,6 +70,7 @@ if (WIN32)
     elseif (ANGLE_ZLIB_DEBUG_DLL)
         configure_file(${ANGLE_ZLIB_DEBUG_DLL} ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
     endif()
+    target_sources(colorconv_gles PRIVATE app.manifest)
 endif()
 
 
