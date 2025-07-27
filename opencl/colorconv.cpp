@@ -162,10 +162,11 @@ public:
                 for (auto& d : devices) {
                     platdevlist.emplace_back(std::make_tuple(p, d));
 
-                    cl::size_type retval;
-                    cl::size_type retsize;
-                    clGetDeviceInfo(d(), CL_DEVICE_HOST_UNIFIED_MEMORY, sizeof(cl::size_type), &retval, &retsize);
-                    is_igpu.emplace_back(retval);
+                    cl::size_type retval = 0;
+                    cl::size_type retsize = sizeof(retval);
+                    if (clGetDeviceInfo(d(), CL_DEVICE_HOST_UNIFIED_MEMORY, sizeof(cl::size_type), &retval, &retsize) == CL_SUCCESS) {
+                        is_igpu.emplace_back(retval);
+                    }
                 }
             }
         }
@@ -661,10 +662,12 @@ void test() {
     const int width = 1920;
     const int height = 1920;
 
-    typename MemT::template MemBlock<char> src(width * height * 4);
-    typename MemT::template MemBlock<char> y(width * height);
-    typename MemT::template MemBlock<char> u(width * height / 4);
-    typename MemT::template MemBlock<char> v(width * height / 4);
+    using MemBlockT = typename MemT::template MemBlock<char>;
+
+    MemBlockT src(width * height * 4);
+    MemBlockT y(width * height);
+    MemBlockT u(width * height / 4);
+    MemBlockT v(width * height / 4);
     memset(src, 255, width * height * 4);
     memset(y, 0, width * height);
     memset(u, 0, width * height / 4);
@@ -703,8 +706,6 @@ void test() {
 
         if (diff > std::chrono::seconds(15))
             break;
-        // auto targetTime = begin + frames * std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)) / fps;
-        // std::this_thread::sleep_until(targetTime);
         
         // 使用转换器对象执行转换
         if (convertEvent[x[0]]) {
@@ -757,22 +758,28 @@ int main() {
         throw std::runtime_error("Invalid buffer type");
     }
 
-    fprintf(stderr, "%s\n", "Reuse OpenCL Buffer object? (0 = no, 1 = yes)");
-    scanf("%d", &reuseBuffer_);
-
-    fprintf(stderr, "%s\n", "Buffer copy mode? (0 = OpenCL Enqueue, 1 = Map)");
-    int bufferCopyMode;
-    scanf("%d", &bufferCopyMode);
-
-    if (bufferCopyMode == 0) {
-        bufferMode_ |= BM_COPY;
-    } else if (bufferCopyMode == 1) {
-        bufferMode_ |= BM_MAP;
+    if (!(bufferMode_ & BM_USE_HOST)) {
+        fprintf(stderr, "%s\n", "Reuse OpenCL Buffer object? (0 = no, 1 = yes)");
+        scanf("%d", &reuseBuffer_);
     } else {
-        throw std::runtime_error("Invalid buffer copy mode");
+        reuseBuffer_ = false; // USE_HOST模式下不能复用缓冲区
     }
 
-    if (bufferCopyMode == 1) {
+    if (!(bufferMode_ & BM_USE_HOST)) { // 非USE_HOST模式拷贝才有意义
+        fprintf(stderr, "%s\n", "Buffer copy mode? (0 = EnqueueCopy, 1 = Map)");
+        int bufferCopyMode;
+        scanf("%d", &bufferCopyMode);
+
+        if (bufferCopyMode == 0) {
+            bufferMode_ |= BM_COPY;
+        } else if (bufferCopyMode == 1) {
+            bufferMode_ |= BM_MAP;
+        } else {
+            throw std::runtime_error("Invalid buffer copy mode");
+        }
+    }
+
+    if (bufferMode_ & BM_MAP) {
         fprintf(stderr, "%s\n", "memcpy implementation? (0 = memcpy, 1 = no copy, 2 = parallel copy)");
         int memcpyImpl;
         scanf("%d", &memcpyImpl);
@@ -791,8 +798,12 @@ int main() {
     int hostMemoryMode;
     scanf("%d", &hostMemoryMode);
 
-    fprintf(stderr, "Use Pipeline? (0 = no, 1 = yes)\n");
-    scanf("%d", &pipelineMode_);
+    if (!(bufferMode_ & (BM_MAP | BM_USE_HOST))) {
+        fprintf(stderr, "Use Pipeline? (0 = no, 1 = yes)\n");
+        scanf("%d", &pipelineMode_);
+    } else {
+        pipelineMode_ = 0; // 暂时还没做map模式下的流水线
+    }
 
     auto innerSwitch = [&](auto t) {
         using T = decltype(t);

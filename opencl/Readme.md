@@ -46,55 +46,78 @@ public:
 
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
-Run in performance mode.
-Sync mode (not pipelined)
+FPS
 
-|HostMem|clBuf    |Method|ReuseClBuf |ReuseClBuf |NoReuse    |NoReuse    |
-|-------|---------|------|-----------|-----------|-----------|-----------|
-|       |         |      |Performance|Quiet      |Performance|Quiet      |
-|Regular|Regular  |R/WBuf|696.124    |418.515    |406.763    |           |
-|Regular|Regular  |MapCpy|675.564    |380.606    |401.541    |           |
-|Regular|SVM      |SvmCpy|700.021    |402.168    |405.251    |           |
-|Regular|SVM      |MapCpy|765.042    |365.445    |396.376    |           |
-|Regular|HostAlloc|R/WBuf|714.867    |399.886    |409.717    |           |
-|Regular|HostAlloc|MapCpy|713.011    |378.29     |382.909    |           |
-|Regular|UseHost  |/     |/          |/          |345.01     |127.319    |
-|Aligned|Regular  |R/WBuf|732.834    |426.259    |448.527    |           |
-|Aligned|UseHost  |/     |/          |/          |941.101    |364.323    |
-|Aligned|SVM      |SvmCpy|787.509    |443.993    |436.746    |           |
-|Pinned |Regular  |R/WBuf|781.758    |437.705    |433.105    |           |
-|Pinned |HostAlloc|R/WBuf|792.734    |441.432    |431.588    |           |
-|Pinned |SVM      |SvmCpy|792.734    |433.096    |440.679    |           |
-|Regular|Regular  |Map   |2004.07    |           |580.949    |           |
-|Regular|SVM      |Map   |2052.12    |           |590.909    |           |
-|Regular|HostAlloc|Map   |2063.19    |           |589.251    |           |
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|PerfMode |QuietMode|
+|-------|--------|----------|--------|---------------|---------|---------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |724.768  |478.307  |
+|Regular|Device  |Yes       |Map     |std            |777.5    |489.579  |
+|Regular|Device  |Yes       |Map     |parallel       |1038.98  |762.262  |
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |601.956  |429.907  |
+|Regular|Device  |No        |R/W Buf |No pipeline    |426.329  |262.219  |
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |745.182  |491.367  |
+|Regular|Host    |Yes       |Map     |std            |773.733  |479.095  |
+|Regular|Host    |Yes       |Map     |parallel       |1012.49  |625.223  |
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |728.356  |415.948  |
+|Regular|Host    |No        |R/W Buf |No pipeline    |425.492  |177.447  |
+|Regular|SVM     |Yes       |R/W Buf |No pipeline    |716.631  |409.503  |
+|Regular|SVM     |Yes       |Map     |std            |779.102  |402.426  |
+|Regular|SVM     |Yes       |Map     |parallel       |1032.91  |626.231  |
+|Regular|SVM     |Yes       |R/W Buf |Pipeline       |589.722  |363.526  |
+|Regular|SVM     |No        |R/W Buf |No pipeline    |422.772  |178.808  |
+|Regular|UseHost |No        |/       |No pipeline    |343.204  |128.057  |
+|Aligned|UseHost |No        |/       |No pipeline    |964.658  |389.658  |
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |757.818  |452.541  |
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |615.917  |388.271  |
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |768.363  |454.085  |
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |615.747  |382.607  |
+|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |784.552  |454.228  |
+|Pinned |SVM     |Yes       |R/W Buf |pipeline       |618.273  |380.582  |
+|Regular|Device  |Yes       |Map     |no copy        |2079.84  |1637.06  |
+|Regular|Host    |Yes       |Map     |no copy        |2058.42  |1491.25  |
+|Regular|SVM     |Yes       |Map     |no copy        |2094.48  |1430.88  |
+
+* map & no copy is not comparable with others
+* perfmode is LegionZone Extreme mode with force max fan speed
+
 
 ## Nvidia RTX 4090 laptop
 
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
-Run in performance mode.
-Sync mode (not pipelined)
+FPS
 
-|HostMem|clBuf    |Method|ReuseClBuf |ReuseClBuf |NoReuse    |
-|-------|---------|------|-----------|-----------|-----------|
-|       |         |      |Performance|Quiet      |Performance|
-|Regular|Regular  |R/WBuf|664.03     |383.381    |380.05     |
-|Regular|Regular  |MapCpy|501.50     |250.837    |151.15     |
-|Regular|SVM      |SvmCpy|667.31     |309.502    |126.91     |
-|Regular|SVM      |MapCpy|529.61     |212.052    |119.39     |
-|Regular|HostAlloc|R/WBuf|669.14     |272.954    |406.08     |
-|Regular|HostAlloc|MapCpy|508.60     |187.856    |157.93     |
-|Regular|UseHost  |/     |/          |/          |279.604    |
-|Aligned|Regular  |R/WBuf|669.95     |285.887    |388.79     |
-|Aligned|UseHost  |/     |/          |/          |291.224    |
-|Aligned|SVM      |SvmCpy|700.66     |287.374    |132.62     |
-|Pinned |Regular  |R/WBuf|1082.74    |532.563    |577.17     |
-|Pinned |HostAlloc|R/WBuf|1080.81    |523.973    |581.04     |
-|Pinned |SVM      |SvmCpy|1075.46    |529.542    |151.26     |
-|Regular|Regular  |Map   |960.02     |           |160.34     |
-|Regular|SVM      |Map   |1058.47    |           |141.33     |
-|Regular|HostAlloc|Map   |956.24     |           |163.18     |
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|PerfMode |QuietMode|
+|-------|--------|----------|--------|---------------|---------|---------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |701.549  |280.827  |
+|Regular|Device  |Yes       |Map     |std            |521.373  |213.441  |
+|Regular|Device  |Yes       |Map     |parallel       |608.851  |303.216  |
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |688.722  |294.482  |
+|Regular|Device  |No        |R/W Buf |No pipeline    |375.036  |166.215  |
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |643.846  |332.454  |
+|Regular|Host    |Yes       |Map     |std            |511.314  |219.08   |
+|Regular|Host    |Yes       |Map     |parallel       |628.596  |297.575  |
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |674.493  |325.892  |
+|Regular|Host    |No        |R/W Buf |No pipeline    |358.85   |161.444  |
+|Regular|SVM     |Yes       |R/W Buf |No pipeline    |689.436  |293.443  |
+|Regular|SVM     |Yes       |Map     |std            |531.535  |230.062  |
+|Regular|SVM     |Yes       |Map     |parallel       |672.901  |326.842  |
+|Regular|SVM     |Yes       |R/W Buf |Pipeline       |720.934  |336.045  |
+|Regular|SVM     |No        |R/W Buf |No pipeline    |127.649  |42.988   |
+|Regular|UseHost |No        |/       |No pipeline    |277.342  |107.593  |
+|Aligned|UseHost |No        |/       |No pipeline    |275.144  |106.94   |
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |1081.47  |558.093  |
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |1178.22  |614.473  |
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |1083.96  |560.265  |
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |1175.06  |606.322  |
+|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |1093.89  |552.448  |
+|Pinned |SVM     |Yes       |R/W Buf |pipeline       |1177.21  |614.287  |
+|Regular|Device  |Yes       |Map     |no copy        |948.665  |478.627  |
+|Regular|Host    |Yes       |Map     |no copy        |960.8    |482.193  |
+|Regular|SVM     |Yes       |Map     |no copy        |1060.55  |536.573  |
+
+* map & no copy is not comparable with others
+* perfmode is LegionZone Extreme mode with force max fan speed
 
 
 ## Nvidia RTX 2060 desktop
