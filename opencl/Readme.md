@@ -173,51 +173,59 @@ not my computer
 
 ## OpenCL on D3D12: Intel UHD Graphics (i9-13900HX)
 
-(Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
 
-Memory: DDR5 Single-Rank 16GB*2 5600MHz
+Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
-|HostMem|clBuf    |Method|ReuseClBuf|ReuseClBuf |NoReuse    |NoReuse    |
-|-------|---------|------|----------|-----------|-----------|-----------|
-|       |         |      |Quite     |Performance|Quite      |Performance|
-|Regular|Regular  |R/WBuf|63.9      |           |54.1       |           |
-|Regular|Regular  |MapCpy|61        |           |49.7       |           |
-|Regular|Regular  |Map   |          |           |           |           |
-|Regular|SVM      |SvmCpy|/         |/          |/          |/          |
-|Regular|SVM      |MapCpy|/         |/          |/          |/          |
-|Regular|SVM      |Map   |/         |/          |/          |/          |
-|Regular|HostAlloc|R/WBuf|61.7      |           |55         |           |
-|Regular|HostAlloc|MapCpy|59.5      |           |50.7       |           |
-|Regular|HostAlloc|Map   |          |           |           |           |
-|Regular|UseHost  |/     |/         |/          |36.2       |           |
-|Aligned|Regular  |R/WBuf|64.2      |           |56         |           |
-|Aligned|UseHost  |/     |/         |/          |36.3       |           |
-|Pinned |Regular  |R/WBuf|10.7      |           |10.6       |           |
-|Pinned |HostAlloc|R/WBuf|10.9      |           |10.7       |           |
+LegionZone Extreme mode
+
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|FPS    |
+|-------|--------|----------|--------|---------------|-------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |80.1079|
+|Regular|Device  |Yes       |Map     |std            |67.1774|
+|Regular|Device  |Yes       |Map     |parallel       |69.7015|
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |79.3718|
+|Regular|Device  |No        |R/W Buf |No pipeline    |71.6365|
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |42.2624|
+|Regular|Host    |Yes       |Map     |std            |46.4361|
+|Regular|Host    |Yes       |Map     |parallel       |73.7193|
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |45.4963|
+|Regular|Host    |No        |R/W Buf |No pipeline    |40.8552|
+|Regular|UseHost |No        |/       |No pipeline    |51.4794|
+|Aligned|UseHost |No        |/       |No pipeline    |51.2948|
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |17.7425|
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |17.6574|
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |15.2916|
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |17.269 |
+|Regular|Device  |Yes       |Map     |no copy        |73.4595|
+|Regular|Host    |Yes       |Map     |no copy        |106.412|
+
 
 ## OpenCL on D3D12: Nvidia RTX 4090 laptop
 
-(Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
+Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
-Memory: DDR5 Single-Rank 16GB*2 5600MHz
+LegionZone Extreme mode
 
-|HostMem|clBuf    |Method|ReuseClBuf|ReuseClBuf |NoReuse    |NoReuse    |
-|-------|---------|------|----------|-----------|-----------|-----------|
-|       |         |      |Quite     |Performance|Quite      |Performance|
-|Regular|Regular  |R/WBuf|184.4     |           |121.9      |           |
-|Regular|Regular  |MapCpy|152.4     |           |111.4      |           |
-|Regular|Regular  |Map   |211.1     |           |139.9      |           |
-|Regular|SVM      |SvmCpy|/         |/          |/          |/          |
-|Regular|SVM      |MapCpy|/         |/          |/          |/          |
-|Regular|SVM      |Map   |/         |/          |/          |/          |
-|Regular|HostAlloc|R/WBuf|171.2     |           |98.4*      |           |
-|Regular|HostAlloc|MapCpy|146.4     |           |109.3      |           |
-|Regular|HostAlloc|Map   |222.1     |           |139.8      |           |
-|Regular|UseHost  |/     |/         |/          |53.7*      |           |
-|Aligned|Regular  |R/WBuf|168.9     |           |99.1*      |           |
-|Aligned|UseHost  |/     |/         |/          |39.3*      |           |
-|Pinned |Regular  |R/WBuf|11.1      |           |11.1       |           |
-|Pinned |HostAlloc|R/WBuf|11.4      |           |11         |           |
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|FPS    |
+|-------|--------|----------|--------|---------------|-------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |400.714|
+|Regular|Device  |Yes       |Map     |std            |224.019|
+|Regular|Device  |Yes       |Map     |parallel       |256.754|
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |412.957|
+|Regular|Device  |No        |R/W Buf |No pipeline    |229.268|
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |39.0526|
+|Regular|Host    |Yes       |Map     |std            |35.8255|
+|Regular|Host    |Yes       |Map     |parallel       |75.1597|
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |38.8418|
+|Regular|Host    |No        |R/W Buf |No pipeline    |36.7921|
+|Regular|UseHost |No        |/       |No pipeline    |86.7528|
+|Aligned|UseHost |No        |/       |No pipeline    |81.2017|
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |17.9674|
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |17.7706|
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |11.336 |
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |14.655 |
+|Regular|Device  |Yes       |Map     |no copy        |299.986|
+|Regular|Host    |Yes       |Map     |no copy        |87.8465|
 
 
 # Test Result For libANGLE / D3D11
