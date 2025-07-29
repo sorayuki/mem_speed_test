@@ -45,32 +45,32 @@ double do_test(const std::string& inputs) {
 #include <iostream>
 int main() {
     // device / buffer type / reuse buffer object / buffer copy mode / memcpy impl / host memory mode / use pipeline
-    std::cout << "|Regular|Device  |Yes       |R/W Buf |No pipeline    |" << do_test("3 0 1 0   0 0") << "|" << std::endl;
-    std::cout << "|Regular|Device  |Yes       |Map     |std            |" << do_test("3 0 1 1 0 0  ") << "|" << std::endl;
-    std::cout << "|Regular|Device  |Yes       |Map     |no copy        |" << do_test("3 0 1 1 1 0  ") << "|" << std::endl;
-    std::cout << "|Regular|Device  |Yes       |Map     |parallel       |" << do_test("3 0 1 1 2 0  ") << "|" << std::endl;
-    std::cout << "|Regular|Device  |Yes       |R/W Buf |Pipeline       |" << do_test("3 0 1 0   0 1") << "|" << std::endl;
-    std::cout << "|Regular|Device  |No        |R/W Buf |No pipeline    |" << do_test("3 0 0 0   0 0") << "|" << std::endl;
-    std::cout << "|Regular|Host    |Yes       |R/W Buf |No pipeline    |" << do_test("3 2 1 0   0 0") << "|" << std::endl;
-    std::cout << "|Regular|Host    |Yes       |Map     |std            |" << do_test("3 2 1 1 0 0  ") << "|" << std::endl;
-    std::cout << "|Regular|Host    |Yes       |Map     |no copy        |" << do_test("3 2 1 1 1 0  ") << "|" << std::endl;
-    std::cout << "|Regular|Host    |Yes       |Map     |parallel       |" << do_test("3 2 1 1 2 0  ") << "|" << std::endl;
-    std::cout << "|Regular|Host    |Yes       |R/W Buf |Pipeline       |" << do_test("3 2 1 0   0 0") << "|" << std::endl;
-    std::cout << "|Regular|Host    |No        |R/W Buf |No pipeline    |" << do_test("3 2 0 0   0 0") << "|" << std::endl;
-    //std::cout << "|Regular|SVM     |Yes       |R/W Buf |No pipeline    |" << do_test("3 1 1 0   0 0") << "|" << std::endl;
-    //std::cout << "|Regular|SVM     |Yes       |Map     |std            |" << do_test("3 1 1 1 0 0  ") << "|" << std::endl;
-    //std::cout << "|Regular|SVM     |Yes       |Map     |no copy        |" << do_test("3 1 1 1 1 0  ") << "|" << std::endl;
-    //std::cout << "|Regular|SVM     |Yes       |Map     |parallel       |" << do_test("3 1 1 1 2 0  ") << "|" << std::endl;
-    //std::cout << "|Regular|SVM     |Yes       |R/W Buf |Pipeline       |" << do_test("3 1 1 0   0 1") << "|" << std::endl;
-    //std::cout << "|Regular|SVM     |No        |R/W Buf |No pipeline    |" << do_test("3 1 0 0   0 0") << "|" << std::endl;
-    std::cout << "|Regular|UseHost |No        |/       |No pipeline    |" << do_test("3 3       0 0") << "|" << std::endl;
-    std::cout << "|Aligned|UseHost |No        |/       |No pipeline    |" << do_test("3 3       1 0") << "|" << std::endl;
-    std::cout << "|Pinned |Device  |Yes       |R/W Buf |No pipeline    |" << do_test("3 0 1 0   2 0") << "|" << std::endl;
-    std::cout << "|Pinned |Device  |Yes       |R/W Buf |pipeline       |" << do_test("3 0 1 0   2 1") << "|" << std::endl;
-    std::cout << "|Pinned |Host    |Yes       |R/W Buf |No pipeline    |" << do_test("3 2 1 0   2 0") << "|" << std::endl;
-    std::cout << "|Pinned |Host    |Yes       |R/W Buf |pipeline       |" << do_test("3 2 1 0   2 1") << "|" << std::endl;
-    //std::cout << "|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |" << do_test("3 1 1 0   2 0") << "|" << std::endl;
-    //std::cout << "|Pinned |SVM     |Yes       |R/W Buf |pipeline       |" << do_test("3 1 1 0   2 1") << "|" << std::endl;
+    std::cout << "|Regular|Device  |Yes       |R/W Buf |No pipeline    |" << do_test("0 0 1 0   0 0") << "|" << std::endl;
+    std::cout << "|Regular|Device  |Yes       |Map     |std            |" << do_test("0 0 1 1 0 0  ") << "|" << std::endl;
+    std::cout << "|Regular|Device  |Yes       |Map     |no copy        |" << do_test("0 0 1 1 1 0  ") << "|" << std::endl;
+    std::cout << "|Regular|Device  |Yes       |Map     |parallel       |" << do_test("0 0 1 1 2 0  ") << "|" << std::endl;
+    std::cout << "|Regular|Device  |Yes       |R/W Buf |Pipeline       |" << do_test("0 0 1 0   0 1") << "|" << std::endl;
+    std::cout << "|Regular|Device  |No        |R/W Buf |No pipeline    |" << do_test("0 0 0 0   0 0") << "|" << std::endl;
+    std::cout << "|Regular|Host    |Yes       |R/W Buf |No pipeline    |" << do_test("0 2 1 0   0 0") << "|" << std::endl;
+    std::cout << "|Regular|Host    |Yes       |Map     |std            |" << do_test("0 2 1 1 0 0  ") << "|" << std::endl;
+    std::cout << "|Regular|Host    |Yes       |Map     |no copy        |" << do_test("0 2 1 1 1 0  ") << "|" << std::endl;
+    std::cout << "|Regular|Host    |Yes       |Map     |parallel       |" << do_test("0 2 1 1 2 0  ") << "|" << std::endl;
+    std::cout << "|Regular|Host    |Yes       |R/W Buf |Pipeline       |" << do_test("0 2 1 0   0 0") << "|" << std::endl;
+    std::cout << "|Regular|Host    |No        |R/W Buf |No pipeline    |" << do_test("0 2 0 0   0 0") << "|" << std::endl;
+    std::cout << "|Regular|SVM     |Yes       |R/W Buf |No pipeline    |" << do_test("0 1 1 0   0 0") << "|" << std::endl;
+    std::cout << "|Regular|SVM     |Yes       |Map     |std            |" << do_test("0 1 1 1 0 0  ") << "|" << std::endl;
+    std::cout << "|Regular|SVM     |Yes       |Map     |no copy        |" << do_test("0 1 1 1 1 0  ") << "|" << std::endl;
+    std::cout << "|Regular|SVM     |Yes       |Map     |parallel       |" << do_test("0 1 1 1 2 0  ") << "|" << std::endl;
+    std::cout << "|Regular|SVM     |Yes       |R/W Buf |Pipeline       |" << do_test("0 1 1 0   0 1") << "|" << std::endl;
+    std::cout << "|Regular|SVM     |No        |R/W Buf |No pipeline    |" << do_test("0 1 0 0   0 0") << "|" << std::endl;
+    std::cout << "|Regular|UseHost |No        |/       |No pipeline    |" << do_test("0 3       0 0") << "|" << std::endl;
+    std::cout << "|Aligned|UseHost |No        |/       |No pipeline    |" << do_test("0 3       1 0") << "|" << std::endl;
+    std::cout << "|Pinned |Device  |Yes       |R/W Buf |No pipeline    |" << do_test("0 0 1 0   2 0") << "|" << std::endl;
+    std::cout << "|Pinned |Device  |Yes       |R/W Buf |pipeline       |" << do_test("0 0 1 0   2 1") << "|" << std::endl;
+    std::cout << "|Pinned |Host    |Yes       |R/W Buf |No pipeline    |" << do_test("0 2 1 0   2 0") << "|" << std::endl;
+    std::cout << "|Pinned |Host    |Yes       |R/W Buf |pipeline       |" << do_test("0 2 1 0   2 1") << "|" << std::endl;
+    std::cout << "|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |" << do_test("0 1 1 0   2 0") << "|" << std::endl;
+    std::cout << "|Pinned |SVM     |Yes       |R/W Buf |pipeline       |" << do_test("0 1 1 0   2 1") << "|" << std::endl;
     return 0;
 }
 

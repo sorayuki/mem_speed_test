@@ -12,15 +12,15 @@ if (NOT WIN32)
 endif()
 
 
-if (WIN32)
-    list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/OpenCL-SDK-v2024.05.08-Win-x64)
-    add_library(LibCL INTERFACE)
-    find_library(LIB_CL OpenCL REQUIRED)
-    find_path(INC_CL CL/opencl.hpp REQUIRED)
-    target_link_libraries(LibCL INTERFACE ${LIB_CL})
-    target_include_directories(LibCL INTERFACE ${INC_CL})
-    target_compile_definitions(LibCL INTERFACE -DCL_VERSION_2_0)
-endif()
+list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/OpenCL-SDK-v2024.05.08-Win-x64)
+add_library(LibCL INTERFACE)
+find_library(LIB_CL OpenCL NAMES libOpenCL.so REQUIRED)
+# set(LIB_CL ${CMAKE_CURRENT_SOURCE_DIR}/libOpenCL.so)
+find_path(INC_CL CL/opencl.hpp REQUIRED)
+# set(INC_CL ${CMAKE_CURRENT_SOURCE_DIR}/OpenCL-SDK-v2024.05.08-Win-x64/include)
+target_link_libraries(LibCL INTERFACE ${LIB_CL})
+target_include_directories(LibCL INTERFACE ${INC_CL})
+target_compile_definitions(LibCL INTERFACE -DCL_VERSION_2_0)
 
 
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/angle-win-x64)
@@ -52,11 +52,11 @@ if (WIN32)
     add_executable(empty)
     target_sources(empty PRIVATE empty_kernel.cpp)
     target_link_libraries(empty PRIVATE LibCL)
-
-    add_executable(colorconv)
-    target_sources(colorconv PRIVATE colorconv.cpp)
-    target_link_libraries(colorconv PRIVATE LibCL)
 endif()
+
+add_executable(colorconv)
+target_sources(colorconv PRIVATE colorconv.cpp)
+target_link_libraries(colorconv PRIVATE LibCL)
 
 
 add_executable(colorconv_gles)

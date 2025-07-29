@@ -54,17 +54,14 @@ FPS
 |-------|--------|----------|--------|---------------|---------|---------|
 |Regular|Device  |Yes       |R/W Buf |No pipeline    |724.768  |478.307  |
 |Regular|Device  |Yes       |Map     |std            |777.5    |489.579  |
-|Regular|Device  |Yes       |Map     |parallel       |1038.98  |762.262  |
 |Regular|Device  |Yes       |R/W Buf |Pipeline       |601.956  |429.907  |
 |Regular|Device  |No        |R/W Buf |No pipeline    |426.329  |262.219  |
 |Regular|Host    |Yes       |R/W Buf |No pipeline    |745.182  |491.367  |
 |Regular|Host    |Yes       |Map     |std            |773.733  |479.095  |
-|Regular|Host    |Yes       |Map     |parallel       |1012.49  |625.223  |
 |Regular|Host    |Yes       |R/W Buf |Pipeline       |728.356  |415.948  |
 |Regular|Host    |No        |R/W Buf |No pipeline    |425.492  |177.447  |
 |Regular|SVM     |Yes       |R/W Buf |No pipeline    |716.631  |409.503  |
 |Regular|SVM     |Yes       |Map     |std            |779.102  |402.426  |
-|Regular|SVM     |Yes       |Map     |parallel       |1032.91  |626.231  |
 |Regular|SVM     |Yes       |R/W Buf |Pipeline       |589.722  |363.526  |
 |Regular|SVM     |No        |R/W Buf |No pipeline    |422.772  |178.808  |
 |Regular|UseHost |No        |/       |No pipeline    |343.204  |128.057  |
@@ -95,17 +92,14 @@ FPS
 |-------|--------|----------|--------|---------------|---------|---------|
 |Regular|Device  |Yes       |R/W Buf |No pipeline    |701.549  |280.827  |
 |Regular|Device  |Yes       |Map     |std            |521.373  |213.441  |
-|Regular|Device  |Yes       |Map     |parallel       |608.851  |303.216  |
 |Regular|Device  |Yes       |R/W Buf |Pipeline       |688.722  |294.482  |
 |Regular|Device  |No        |R/W Buf |No pipeline    |375.036  |166.215  |
 |Regular|Host    |Yes       |R/W Buf |No pipeline    |643.846  |332.454  |
 |Regular|Host    |Yes       |Map     |std            |511.314  |219.08   |
-|Regular|Host    |Yes       |Map     |parallel       |628.596  |297.575  |
 |Regular|Host    |Yes       |R/W Buf |Pipeline       |674.493  |325.892  |
 |Regular|Host    |No        |R/W Buf |No pipeline    |358.85   |161.444  |
 |Regular|SVM     |Yes       |R/W Buf |No pipeline    |689.436  |293.443  |
 |Regular|SVM     |Yes       |Map     |std            |531.535  |230.062  |
-|Regular|SVM     |Yes       |Map     |parallel       |672.901  |326.842  |
 |Regular|SVM     |Yes       |R/W Buf |Pipeline       |720.934  |336.045  |
 |Regular|SVM     |No        |R/W Buf |No pipeline    |127.649  |42.988   |
 |Regular|UseHost |No        |/       |No pipeline    |277.342  |107.593  |
@@ -134,19 +128,16 @@ Memory: DDR4 8G*4 2400MHz
 |Regular|Device  |Yes       |R/W Buf |No pipeline    |248.36   |
 |Regular|Device  |Yes       |Map     |std            |221.343  |
 |Regular|Device  |Yes       |Map     |no copy        |421.702  |
-|Regular|Device  |Yes       |Map     |parallel       |242.053  |
 |Regular|Device  |Yes       |R/W Buf |Pipeline       |290.044  |
 |Regular|Device  |No        |R/W Buf |No pipeline    |208.179  |
 |Regular|Host    |Yes       |R/W Buf |No pipeline    |278.808  |
 |Regular|Host    |Yes       |Map     |std            |246.56   |
 |Regular|Host    |Yes       |Map     |no copy        |422.303  |
-|Regular|Host    |Yes       |Map     |parallel       |242.107  |
 |Regular|Host    |Yes       |R/W Buf |Pipeline       |278.534  |
 |Regular|Host    |No        |R/W Buf |No pipeline    |190.629  |
 |Regular|SVM     |Yes       |R/W Buf |No pipeline    |278.142  |
 |Regular|SVM     |Yes       |Map     |std            |260.873  |
 |Regular|SVM     |Yes       |Map     |no copy        |463.717  |
-|Regular|SVM     |Yes       |Map     |parallel       |251.8    |
 |Regular|SVM     |Yes       |R/W Buf |Pipeline       |287.527  |
 |Regular|SVM     |No        |R/W Buf |No pipeline    |96.8681  |
 |Regular|UseHost |No        |/       |No pipeline    |159.829  |

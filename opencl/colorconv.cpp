@@ -11,8 +11,11 @@
 #include <memory>
 #include <chrono>
 #include <future>
-#include <windows.h>
 #include <assert.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace {
     bool available_ = false;
@@ -63,6 +66,7 @@ namespace {
 
     size_t cl_mem_align() {
         return gmemAlign_;
+        #if 0
         static std::optional<size_t> align;
         if (!align) {
             SYSTEM_INFO si;
@@ -71,6 +75,7 @@ namespace {
         }
         
         return *align;
+        #endif
     }
 
     struct PinnedMemory {
@@ -105,11 +110,19 @@ namespace {
         public:
             MemBlock(size_t size) {
                 size_ = size;
-                hostPtr_ = (T*)_aligned_malloc(size, cl_mem_align());
+                #ifdef _WIN32
+                    hostPtr_ = (T*)_aligned_malloc(size, cl_mem_align());
+                #else
+                    hostPtr_ = (T*)aligned_alloc(cl_mem_align(), size);
+                #endif
             }
 
             ~MemBlock() {
-                _aligned_free(hostPtr_);
+                #ifdef _WIN32
+                    _aligned_free(hostPtr_);
+                #else
+                    free(hostPtr_);
+                #endif
             }
 
             operator T*() const {
@@ -401,6 +414,8 @@ public:
     bool executeInput(const void* src, cl::Event& event) {
         if (!available_) return false;
 
+        //fprintf(stderr, "%s", "do input.\n");
+
         if (!reuseBuffer_) {
             cleanup();
             initBuffers();
@@ -417,6 +432,8 @@ public:
     
     bool executeCompute(cl::Event& ioEvent) {
         if (!available_) return false;
+
+        //fprintf(stderr, "%s", "do compute.\n");
         
         if (bufferMode_ & BM_SVM) {
             return executeComputeSVM(ioEvent, ioEvent);
@@ -433,6 +450,8 @@ public:
     bool executeOutput(void* dstY, void* dstU, void* dstV, cl::Event& ioEvent) {
         if (!available_) return false;
         
+        //fprintf(stderr, "%s", "do output.\n");
+
         if (bufferMode_ & BM_SVM) {
             return executeOutputSVM(dstY, dstU, dstV, ioEvent, ioEvent);
         } else if (bufferMode_ & BM_USE_HOST) {
@@ -625,6 +644,7 @@ private:
         hostptr = deviceToHostQueue_.enqueueMapBuffer(*tempVBuf_, false, CL_MAP_READ, 0, vSize_, &waitEvents, &outEvent);
         deviceToHostQueue_.enqueueUnmapMemObject(*tempVBuf_, hostptr);
         event = std::move(outEvent);
+
         return true;
     }
     
@@ -634,10 +654,11 @@ private:
             waitEvents.push_back(waitEvent);
         }
         
+        cl::Event outEvent;
         if (bufferMode_ & BM_COPY) {
             deviceToHostQueue_.enqueueReadBuffer(*yBuffer_, false, 0, ySize_, dstY, &waitEvents);
             deviceToHostQueue_.enqueueReadBuffer(*uBuffer_, false, 0, uSize_, dstU);
-            deviceToHostQueue_.enqueueReadBuffer(*vBuffer_, false, 0, vSize_, dstV, nullptr, &event);
+            deviceToHostQueue_.enqueueReadBuffer(*vBuffer_, false, 0, vSize_, dstV, nullptr, &outEvent);
         } else if (bufferMode_ & BM_MAP) {
             auto yMapped = (void*)deviceToHostQueue_.enqueueMapBuffer(*yBuffer_, true, CL_MAP_READ, 0, ySize_, &waitEvents);
             (*mymemcpy)(dstY, yMapped, ySize_);
@@ -649,8 +670,9 @@ private:
             
             auto vMapped = (void*)deviceToHostQueue_.enqueueMapBuffer(*vBuffer_, true, CL_MAP_READ, 0, vSize_);
             (*mymemcpy)(dstV, vMapped, vSize_);
-            deviceToHostQueue_.enqueueUnmapMemObject(*vBuffer_, vMapped, nullptr, &event);
+            deviceToHostQueue_.enqueueUnmapMemObject(*vBuffer_, vMapped, nullptr, &outEvent);
         }
+        event = std::move(outEvent);
         
         return true;
     }
@@ -662,7 +684,7 @@ void test() {
     const int width = 1920;
     const int height = 1920;
 
-    using MemBlockT = typename MemT::template MemBlock<char>;
+    using MemBlockT = typename MemT::template MemBlock<int8_t>;
 
     MemBlockT src(width * height * 4);
     MemBlockT y(width * height);
@@ -674,13 +696,14 @@ void test() {
     memset(v, 0, width * height / 4);
 
     // 创建转换器对象
-    BGRAToI420Converter converter[3] = {
+    BGRAToI420Converter converter[4] = {
+        {width, height, width * 4, width, width / 2, width / 2},
         {width, height, width * 4, width, width / 2, width / 2},
         {width, height, width * 4, width, width / 2, width / 2},
         {width, height, width * 4, width, width / 2, width / 2}
     };
 
-    std::optional<cl::Event> convertEvent[3];
+    std::optional<cl::Event> convertEvent[4];
 
     auto begin = std::chrono::steady_clock::now();
     auto iter_begin = begin;
@@ -690,7 +713,8 @@ void test() {
 
     for(int ind = 0;; ++ind) {
         // pipeline mode or sync mode
-        int x[] = { (ind + 2) % 3, (ind + 1) % 3, ind % 3 };
+        // 流水线：输入，计算，输出，等一帧输出
+        int x[] = { (ind + 3) % 4, (ind + 2) % 4, (ind + 1) % 4, (ind + 0) % 4 };
         if (pipelineMode_ == 0) for(auto& i: x) i = 0;
 
         auto diff = std::chrono::steady_clock::now() - begin;
@@ -708,28 +732,34 @@ void test() {
             break;
         
         // 使用转换器对象执行转换
-        if (convertEvent[x[0]]) {
-            convertEvent[x[0]]->wait();
-
-            if (frames == 1) {
-	            for(int i = 0; i < width * height; ++i) if (y[i] != -21) { fprintf(stderr, "check failed.\n"); break; }
-	            for(int i = 0; i < width * height / 4; ++i) if (u[i] != 126) { fprintf(stderr, "check failed.\n"); break; }
-	            for(int i = 0; i < width * height / 4; ++i) if (v[i] != -128) { fprintf(stderr, "check failed.\n"); break; }
-	        }
-
-            iter_frames += 1;
-            frames += 1;
-        } else {
+        if (!convertEvent[x[0]]) {
             convertEvent[x[0]] = cl::Event();
         }
         converter[x[0]].executeInput(src, *convertEvent[x[0]]);
+        //fprintf(stderr, "%s %lld\n", "input event: ", (*convertEvent[x[0]])());
 
         if (convertEvent[x[1]]) {
             converter[x[1]].executeCompute(*convertEvent[x[1]]);
+            //fprintf(stderr, "%s %lld\n", "compute event: ", (*convertEvent[x[1]])());
         }
 
         if (convertEvent[x[2]]) {
             converter[x[2]].executeOutput(y, u, v, *convertEvent[x[2]]);
+            //fprintf(stderr, "%s %lld\n", "output event: ", (*convertEvent[x[2]])());
+        }
+
+        if (convertEvent[x[3]]) {
+            //fprintf(stderr, "%s %lld\n", "wait event: ", (*convertEvent[x[3]])());
+            convertEvent[x[3]]->wait();
+
+            if (frames == 1) {
+	            for(int i = 0; i < width * height; ++i) if (y[i] != -21) { fprintf(stderr, "check failed. %d != %d\n", y[i], -21); break; }
+	            for(int i = 0; i < width * height / 4; ++i) if (u[i] != 126) { fprintf(stderr, "check failed. %d != %d\n", u[i], 126); break; }
+	            for(int i = 0; i < width * height / 4; ++i) if (v[i] != -128) { fprintf(stderr, "check failed. %d != %d\n", v[i], -128); break; }
+	        }
+
+            iter_frames += 1;
+            frames += 1;
         }
     }
 
