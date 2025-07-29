@@ -46,6 +46,8 @@ public:
 
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
+LegionZone Extreme mode
+
 FPS
 
 |HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|PerfMode |QuietMode|
@@ -81,9 +83,11 @@ FPS
 * perfmode is LegionZone Extreme mode with force max fan speed
 
 
-## Nvidia RTX 4090 laptop
+## Nvidia RTX 4090 laptop PCIE 4x16
 
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
+
+LegionZone Extreme mode
 
 FPS
 
@@ -120,31 +124,39 @@ FPS
 * perfmode is LegionZone Extreme mode with force max fan speed
 
 
-## Nvidia RTX 2060 desktop
+## Nvidia RTX 2060 desktop PCIE 3x16
 
-(collected at cde46e404a2cb8e11d2508e155e816469a12d538)
-
+CPU: Intel i7-10700
 Memory: DDR4 8G*4 2400MHz
-pipelined
 
-|HostMem|clBuf    |Method|ReuseClBuf |NoReuse    |
-|-------|---------|------|-----------|-----------|
-|Regular|Regular  |R/WBuf|251.48     |185.75     |
-|Regular|Regular  |MapCpy|214.73     |82.16      |
-|Regular|SVM      |SvmCpy|263.27     |82.8       |
-|Regular|SVM      |MapCpy|232.78     |82.97      |
-|Regular|HostAlloc|R/WBuf|256.43     |200.29     |
-|Regular|HostAlloc|MapCpy|225.84     |84.34      |
-|Regular|UseHost  |/     |           |           |
-|Aligned|Regular  |R/WBuf|270.58     |199.5      |
-|Aligned|UseHost  |/     |           |           |
-|Aligned|SVM      |SvmCpy|265.43     |84.86      |
-|Pinned |Regular  |R/WBuf|497.86     |297.63     |
-|Pinned |HostAlloc|R/WBuf|499.14     |304.42     |
-|Pinned |SVM      |SvmCpy|495.37     |104.51     |
-|Regular|Regular  |Map   |441.54     |107.29     |
-|Regular|SVM      |Map   |464.76     |104.27     |
-|Regular|HostAlloc|Map   |437.69     |108.04     |
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|FPS      |
+|-------|--------|----------|--------|---------------|---------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |248.36   |
+|Regular|Device  |Yes       |Map     |std            |221.343  |
+|Regular|Device  |Yes       |Map     |no copy        |421.702  |
+|Regular|Device  |Yes       |Map     |parallel       |242.053  |
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |290.044  |
+|Regular|Device  |No        |R/W Buf |No pipeline    |208.179  |
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |278.808  |
+|Regular|Host    |Yes       |Map     |std            |246.56   |
+|Regular|Host    |Yes       |Map     |no copy        |422.303  |
+|Regular|Host    |Yes       |Map     |parallel       |242.107  |
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |278.534  |
+|Regular|Host    |No        |R/W Buf |No pipeline    |190.629  |
+|Regular|SVM     |Yes       |R/W Buf |No pipeline    |278.142  |
+|Regular|SVM     |Yes       |Map     |std            |260.873  |
+|Regular|SVM     |Yes       |Map     |no copy        |463.717  |
+|Regular|SVM     |Yes       |Map     |parallel       |251.8    |
+|Regular|SVM     |Yes       |R/W Buf |Pipeline       |287.527  |
+|Regular|SVM     |No        |R/W Buf |No pipeline    |96.8681  |
+|Regular|UseHost |No        |/       |No pipeline    |159.829  |
+|Aligned|UseHost |No        |/       |No pipeline    |155.639  |
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |465.744  |
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |505.815  |
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |439.989  |
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |496.896  |
+|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |467.537  |
+|Pinned |SVM     |Yes       |R/W Buf |pipeline       |504.386  |
 
 
 ## AMD Vega64 Desktop
@@ -170,6 +182,7 @@ not my computer
 |Pinned |Regular  |R/WBuf|143.4     |143.1      |
 |Pinned |HostAlloc|R/WBuf|143.2     |142.9      |
 * Some data not tested
+
 
 ## OpenCL on D3D12: Intel UHD Graphics (i9-13900HX)
 
@@ -200,7 +213,7 @@ LegionZone Extreme mode
 |Regular|Host    |Yes       |Map     |no copy        |106.412|
 
 
-## OpenCL on D3D12: Nvidia RTX 4090 laptop
+## OpenCL on D3D12: Nvidia RTX 4090 laptop PCIE 4x16
 
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
 
