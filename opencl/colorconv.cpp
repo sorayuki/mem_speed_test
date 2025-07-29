@@ -202,8 +202,13 @@ public:
 
         ctx_ = cl::Context(cl::vector<cl::Device>{ std::get<1>(selected) });
         hostToDeviceQueue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
-        computeQueue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
-        deviceToHostQueue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
+        if (pipelineMode_) {
+            computeQueue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
+            deviceToHostQueue_ = cl::CommandQueue{ ctx_, std::get<1>(selected), cl::QueueProperties::None };
+        } else {
+            computeQueue_ = hostToDeviceQueue_;
+            deviceToHostQueue_ = hostToDeviceQueue_;
+        }
         gmemAlign_ = std::get<1>(selected).getInfo<CL_DEVICE_MEM_BASE_ADDR_ALIGN>();
         auto svm_caps = std::get<1>(selected).getInfo<CL_DEVICE_SVM_CAPABILITIES>();
         supportSvm_ = !!svm_caps;
