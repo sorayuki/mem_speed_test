@@ -150,6 +150,104 @@ Memory: DDR4 8G*4 2400MHz
 |Pinned |SVM     |Yes       |R/W Buf |pipeline       |504.386  |
 
 
+## RegMagic 10 Pro
+
+破坏神模式
+
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|FPS      |
+|-------|--------|----------|--------|---------------|---------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |461.154|
+|Regular|Device  |Yes       |Map     |std            |744.344|
+|Regular|Device  |Yes       |Map     |parallel       |669.712|
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |403.038|
+|Regular|Device  |No        |R/W Buf |No pipeline    |91.4972|
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |460.287|
+|Regular|Host    |Yes       |Map     |std            |745.735|
+|Regular|Host    |Yes       |Map     |parallel       |672.566|
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |442.249|
+|Regular|Host    |No        |R/W Buf |No pipeline    |92.3241|
+|Regular|SVM     |Yes       |R/W Buf |No pipeline    |428.622|
+|Regular|SVM     |Yes       |Map     |std            |725.268|
+|Regular|SVM     |Yes       |Map     |parallel       |670.854|
+|Regular|SVM     |Yes       |R/W Buf |Pipeline       |407.376|
+|Regular|SVM     |No        |R/W Buf |No pipeline    |92.3678|
+|Regular|UseHost |No        |/       |No pipeline    |96.3795|
+|Aligned|UseHost |No        |/       |No pipeline    |95.5658|
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |420.227|
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |410.787|
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |437.848|
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |407.975|
+|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |415.424|
+|Pinned |SVM     |Yes       |R/W Buf |pipeline       |408.916|
+|Regular|Device  |Yes       |Map     |no copy        |872.52|
+|Regular|Host    |Yes       |Map     |no copy        |873.028|
+|Regular|SVM     |Yes       |Map     |no copy        |785.551|
+
+
+## OnePlus 7 Pro
+
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|FPS      |
+|-------|--------|----------|--------|---------------|---------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |47.068|
+|Regular|Device  |Yes       |Map     |std            |151.869|
+|Regular|Device  |Yes       |Map     |no copy        |136.745|
+|Regular|Device  |Yes       |Map     |parallel       |79.6855|
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |75.0089|
+|Regular|Device  |No        |R/W Buf |No pipeline    |23.1481|
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |40.8492|
+|Regular|Host    |Yes       |Map     |std            |143.518|
+|Regular|Host    |Yes       |Map     |no copy        |167.758|
+|Regular|Host    |Yes       |Map     |parallel       |91.8135|
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |40.9184|
+|Regular|Host    |No        |R/W Buf |No pipeline    |26.6077|
+|Regular|SVM     |Yes       |R/W Buf |No pipeline    |37.0971|
+|Regular|SVM     |Yes       |Map     |std            |81.666|
+|Regular|SVM     |Yes       |Map     |no copy        |64.9553|
+|Regular|SVM     |Yes       |Map     |parallel       |55.0997|
+|Regular|SVM     |Yes       |R/W Buf |Pipeline       |90.5283|
+|Regular|SVM     |No        |R/W Buf |No pipeline    |25.1285|
+|Regular|UseHost |No        |/       |No pipeline    |33.8554|
+|Aligned|UseHost |No        |/       |No pipeline    |32.563|
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |41.4993|
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |70.9536|
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |41.6637|
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |70.1617|
+|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |37.0344|
+|Pinned |SVM     |Yes       |R/W Buf |pipeline       |62.624|
+
+
+## Oppo Find X8 s
+
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|FPS      |
+|-------|--------|----------|--------|---------------|---------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |76.5628|
+|Regular|Device  |Yes       |Map     |std            |70.6741|
+|Regular|Device  |Yes       |Map     |no copy        |104.882|
+|Regular|Device  |Yes       |Map     |parallel       |79.009|
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |132.944|
+|Regular|Device  |No        |R/W Buf |No pipeline    |82.2102|
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |76.5136|
+|Regular|Host    |Yes       |Map     |std            |73.6431|
+|Regular|Host    |Yes       |Map     |no copy        |102.225|
+|Regular|Host    |Yes       |Map     |parallel       |78.4508|
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |70.3585|
+|Regular|Host    |No        |R/W Buf |No pipeline    |80.7242|
+|Regular|SVM     |Yes       |R/W Buf |No pipeline    |74.4212|
+|Regular|SVM     |Yes       |Map     |std            |71.0944|
+|Regular|SVM     |Yes       |Map     |no copy        |96.8384|
+|Regular|SVM     |Yes       |Map     |parallel       |78.6054|
+|Regular|SVM     |Yes       |R/W Buf |Pipeline       |139.614|
+|Regular|SVM     |No        |R/W Buf |No pipeline    |74.4311|
+|Regular|UseHost |No        |/       |No pipeline    |86.0452|
+|Aligned|UseHost |No        |/       |No pipeline    |101.001|
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |77.2182|
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |125.347|
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |74.4048|
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |127.705|
+|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |74.2922|
+|Pinned |SVM     |Yes       |R/W Buf |pipeline       |123.843|
+
+
 ## AMD Vega64 Desktop
 
 (Outdated, collected before 7da2afe06bc8e7e4a52b23bd2bf151e195349ba1)
