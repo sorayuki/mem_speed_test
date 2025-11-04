@@ -192,7 +192,7 @@ void processRegion(int2 topLeft) {
         if (useComputeShader_) {
             // Compute shader
             std::string computeShaderSource = std::string(sharedShaderCode) + R"(
-[numthreads(1, 1, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
     int2 topLeft = int2(id.x * 8, id.y * 2);
     
