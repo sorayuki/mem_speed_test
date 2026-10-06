@@ -80,6 +80,40 @@ FPS
 * perfmode is LegionZone Extreme mode with force max fan speed
 
 
+## Intel UHD Graphics (U9-290HX+)
+
+Memory: DDR5 Single-Rank 16GB*2 6400MHz
+
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|FPS    |
+|-------|--------|----------|--------|---------------|-------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |632.049|
+|Regular|Device  |Yes       |Map     |std            |659.625|
+|Regular|Device  |Yes       |Map     |parallel       |704.854|
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |780.427|
+|Regular|Device  |No        |R/W Buf |No pipeline    |397.503|
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |640.023|
+|Regular|Host    |Yes       |Map     |std            |658.817|
+|Regular|Host    |Yes       |Map     |parallel       |707.402|
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |637.09|
+|Regular|Host    |No        |R/W Buf |No pipeline    |398.131|
+|Regular|SVM     |Yes       |R/W Buf |No pipeline    |608.506|
+|Regular|SVM     |Yes       |Map     |std            |1060.54|
+|Regular|SVM     |Yes       |Map     |parallel       |1086.74|
+|Regular|SVM     |Yes       |R/W Buf |Pipeline       |750.803|
+|Regular|SVM     |No        |R/W Buf |No pipeline    |350.735|
+|Regular|UseHost |No        |/       |No pipeline    |437.531|
+|Aligned|UseHost |No        |/       |No pipeline    |916.833|
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |1113.74|
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |1116.9|
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |1036.62|
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |1091.81|
+|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |1086.39|
+|Pinned |SVM     |Yes       |R/W Buf |pipeline       |1091.62|
+|Regular|Device  |Yes       |Map     |no copy        |1015.49|
+|Regular|Host    |Yes       |Map     |no copy        |1004.78|
+|Regular|SVM     |Yes       |Map     |no copy        |2114.12|
+
+
 ## Nvidia RTX 4090 laptop PCIE 4x16
 
 Memory: DDR5 Double-Rank 48GB*2 5600MHz run at 5200MHz
@@ -116,6 +150,39 @@ FPS
 
 * map & no copy is not comparable with others
 * perfmode is LegionZone Extreme mode with force max fan speed
+
+## Nvidia RTX 5080 laptop PCIE 4x16
+
+Memory: DDR5 Single-Rank 16GB*2 6400MHz
+
+|HostMem|clBuf   |ReuseClBuf|CopyMode|Memcpy/Pipeline|FPS    |
+|-------|--------|----------|--------|---------------|-------|
+|Regular|Device  |Yes       |R/W Buf |No pipeline    |852.227|
+|Regular|Device  |Yes       |Map     |std            |826.397|
+|Regular|Device  |Yes       |Map     |parallel       |949.668|
+|Regular|Device  |Yes       |R/W Buf |Pipeline       |888.508|
+|Regular|Device  |No        |R/W Buf |No pipeline    |480.945|
+|Regular|Host    |Yes       |R/W Buf |No pipeline    |886.224|
+|Regular|Host    |Yes       |Map     |std            |815.664|
+|Regular|Host    |Yes       |Map     |parallel       |899.493|
+|Regular|Host    |Yes       |R/W Buf |Pipeline       |881.416|
+|Regular|Host    |No        |R/W Buf |No pipeline    |454.727|
+|Regular|SVM     |Yes       |R/W Buf |No pipeline    |819.792|
+|Regular|SVM     |Yes       |Map     |std            |693.691|
+|Regular|SVM     |Yes       |Map     |parallel       |825.826|
+|Regular|SVM     |Yes       |R/W Buf |Pipeline       |725.403|
+|Regular|SVM     |No        |R/W Buf |No pipeline    |139.523|
+|Regular|UseHost |No        |/       |No pipeline    |311.265|
+|Aligned|UseHost |No        |/       |No pipeline    |318.311|
+|Pinned |Device  |Yes       |R/W Buf |No pipeline    |2098.11|
+|Pinned |Device  |Yes       |R/W Buf |pipeline       |2076.85|
+|Pinned |Host    |Yes       |R/W Buf |No pipeline    |2098.91|
+|Pinned |Host    |Yes       |R/W Buf |pipeline       |2085.62|
+|Pinned |SVM     |Yes       |R/W Buf |No pipeline    |2089.9 |
+|Pinned |SVM     |Yes       |R/W Buf |pipeline       |2077.12|
+|Regular|Device  |Yes       |Map     |no copy        |1749.05|
+|Regular|Host    |Yes       |Map     |no copy        |1740.27|
+|Regular|SVM     |Yes       |Map     |no copy        |1682.57|
 
 
 ## Nvidia RTX 2060 desktop PCIE 3x16

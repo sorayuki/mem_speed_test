@@ -13,7 +13,7 @@ endif()
 
 
 if (WIN32)
-    list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/OpenCL-SDK-v2024.05.08-Win-x64)
+    list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/OpenCL-SDK-v2026.05.29-Win-x64)
 else()
     list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/OpenCL-SDK-android-arm64-v8a)
     set(OpenCL_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/OpenCL-SDK-android-arm64-v8a/include)
@@ -79,7 +79,7 @@ if (WIN32)
 endif()
 
 if (WIN32)
-    list(APPEND CMAKE_PREFIX_PATH "D:/dev/boost_1_88_0/dist/lib/cmake/Boost-1.88.0")
+    list(APPEND CMAKE_PREFIX_PATH "D:\\dev\\boost-1.92.0\\dist")
     add_executable(do_opencltest)
     set_target_properties(do_opencltest PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     target_sources(do_opencltest PRIVATE do_opencltest.cpp)
